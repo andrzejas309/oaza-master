@@ -1,0 +1,183 @@
+/* PODSTAWY */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: #0f172a; /* ciemne tło – lepsze na TV */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #111827;
+    font-size: 16px;
+}
+
+/* większe fonty na tablet / desktop */
+@media (min-width: 768px) {
+    body {
+        font-size: 17px;
+    }
+}
+
+@media (min-width: 1280px) {
+    body {
+        font-size: 18px;
+    }
+}
+
+/* tryb TV – bardzo duże ekrany */
+@media (min-width: 1600px) {
+    body {
+        font-size: 20px;
+    }
+}
+
+button {
+    cursor: pointer;
+}
+
+/* LAYOUTY */
+
+.view-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+/* na TV powiększamy marginesy */
+@media (min-width: 1600px) {
+    .view-container {
+        padding: 2rem;
+    }
+}
+
+.card {
+    background: #ffffff;
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+}
+
+/* Karty TV – szczególnie do kuchni */
+.tv-card {
+    border-radius: 1.25rem;
+    padding: 1.25rem 1.5rem;
+}
+
+/* FLEX helpers */
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-row {
+    flex-direction: row;
+}
+
+.gap-1 {
+    gap: 0.25rem;
+}
+.gap-2 {
+    gap: 0.5rem;
+}
+.gap-3 {
+    gap: 0.75rem;
+}
+.gap-4 {
+    gap: 1rem;
+}
+
+/* BUTTONY */
+
+.btn {
+    border: none;
+    border-radius: 9999px;
+    padding: 0.6rem 1.4rem;
+    font-weight: 600;
+    background: #2563eb;
+    color: white;
+    font-size: 0.95rem;
+    transition: transform 0.05s ease, box-shadow 0.05s ease, background 0.1s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-outline {
+    background: white;
+    color: #111827;
+    border: 1px solid #d1d5db;
+}
+
+.btn-secondary {
+    background: #4b5563;
+}
+
+.btn-danger {
+    background: #dc2626;
+}
+
+/* KUCHNIA – grid kart na duże ekrany */
+
+.kitchen-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+@media (min-width: 768px) {
+    .kitchen-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1280px) {
+    .kitchen-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* Karty zamówień – duże, TV-friendly */
+
+.order-card {
+    padding: 1rem 1.25rem;
+    border-radius: 1rem;
+}
+
+.order-card-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+@media (min-width: 1600px) {
+    .order-card {
+        padding: 1.4rem 1.75rem;
+    }
+
+    .order-card-header {
+        font-size: 1.3rem;
+    }
+}
+
+/* Pomocnicze klasy */
+
+.items-center {
+    align-items: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
