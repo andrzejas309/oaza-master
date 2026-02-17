@@ -44,8 +44,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../firebase'
-import { roleByEmail } from '../router'
+import { auth } from '@/firebase'
+import { getRoleForEmail } from '@/router'
 
 const email = ref('')
 const password = ref('')
@@ -59,7 +59,15 @@ const onSubmit = async () => {
   try {
     const cred = await signInWithEmailAndPassword(auth, email.value, password.value)
     const user = cred.user
-    const role = roleByEmail[user.email] || null
+
+    let role = null
+    try {
+      role = await getRoleForEmail(user.email)
+    } catch (roleError) {
+      console.error('Role fetch error:', roleError)
+      error.value = 'Brak dostępu do roli. Sprawdź reguły Firestore.'
+      return
+    }
 
     if (role === 'obsluga') await router.replace('/obsluga')
     else if (role === 'kuchnia') await router.replace('/kuchnia')

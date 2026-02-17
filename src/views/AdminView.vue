@@ -3,9 +3,9 @@
     <header class="flex flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <h1 style="font-size: 1.75rem; font-weight: 800;">Panel admina</h1>
       <div class="flex flex-row" style="gap: 0.5rem; align-items: center;">
-        <button class="btn-secondary btn" @click="router.push('/obsluga')">Obsługa</button>
-        <button class="btn-secondary btn" @click="router.push('/kuchnia')">Kuchnia</button>
-        <button class="btn-secondary btn" @click="logout">Wyloguj</button>
+        <button class="btn-outline btn-sm" @click="router.push('/obsluga')">Obsługa</button>
+        <button class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
+        <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
       </div>
     </header>
 
@@ -57,7 +57,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { signOut } from 'firebase/auth'
-import { auth, db } from '../firebase'
+import { auth, db } from '@/firebase'
 import { useRouter } from 'vue-router'
 import {
   collection,
@@ -228,5 +228,25 @@ fetchData()
   .md\:flex-row {
     flex-direction: column;
   }
+}
+
+/* Styl przycisków jak w panelu obsługi */
+.btn-outline {
+  background: white;
+  border: 2px solid #ff8a3c;
+  color: #e67700;
+  padding: 0.6rem 1.2rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-outline:hover {
+  background: #ff8a3c;
+  color: black;
+}
+.btn-sm {
+  font-size: 0.9rem;
+  padding: 0.4rem 0.8rem;
 }
 </style>

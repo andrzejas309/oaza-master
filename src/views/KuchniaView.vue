@@ -70,7 +70,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { auth, db } from '../firebase'
+import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
@@ -187,20 +187,24 @@ const formatTime = (ts) => {
 }
 
 /* przyciski */
-.btn-outline,
-.btn-sage-outline {
+.btn-outline {
   border-radius: 9999px;
-  padding: 0.45rem 1rem;
-  border: 2px solid var(--sage);
-  color: var(--sage);
-  background: transparent;
+  padding: 0.6rem 1.2rem;
+  border: 2px solid #ff8a3c;
+  color: #e67700;
+  background: white;
   cursor: pointer;
+  font-weight: 600;
   transition: all 0.2s ease;
 }
-.btn-outline:hover,
-.btn-sage-outline:hover {
-  background: var(--sage);
-  color: #fff;
+.btn-outline:hover {
+  background: #ff8a3c;
+  color: black;
+}
+
+.btn-sm {
+  font-size: 0.9rem;
+  padding: 0.4rem 0.8rem;
 }
 
 /* karta podsumowania */
@@ -259,27 +263,6 @@ const formatTime = (ts) => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-/* domyślny */
-.order-top-default {
-  background: var(--gray-soft);
-}
-
-/* Na miejscu – żółty */
-.order-top.k-type-namiejscu {
-  background: #fee9a6; /* żółty */
-}
-
-/* Na wynos – pomarańczowy */
-.order-top.k-type-nawynos {
-  background: #ffb39b; /* pomarańczowy */
-}
-
-/* Dostawa – zielony */
-.order-top.k-type-dostawa {
-  background: #b7e4b6; /* zielony */
-}
-
-
 .order-number {
   font-weight: 700;
 }
@@ -317,17 +300,6 @@ const formatTime = (ts) => {
 
 .muted {
   color: var(--muted);
-}
-
-/* animacja */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.25s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 /* RWD – na mniejszych ekranach podsumowanie pod spodem */

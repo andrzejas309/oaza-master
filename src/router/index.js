@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { onAuthStateChanged, getAuth } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/firebase'
 import '../firebase' // żeby mieć zainicjowane Firebase
 
 const LoginView = () => import('../views/LoginView.vue')
@@ -8,12 +10,11 @@ const KuchniaView = () => import('../views/KuchniaView.vue')
 const AdminView = () => import('../views/AdminView.vue')
 // const DevSeedView = () => import('../views/DevSeedView.vue')
 
-// Mapowanie email → rola
-export const roleByEmail = {
-    // 'obsluga@example.com': 'obsluga',
-    // 'kuchnia@example.com': 'kuchnia',
-    // 'admin@example.com': 'admin'
-    'ada.myslinska21@gmail.com': 'admin'
+// Rola użytkownika jest pobierana z Firestore: kolekcja `role`, dokument o id = email
+export async function getRoleForEmail(email) {
+    if (!email) return null
+    const snap = await getDoc(doc(db, 'role', email))
+    return snap.exists() ? snap.data().role || null : null
 }
 
 const routes = [
@@ -52,7 +53,13 @@ router.beforeEach(async (to, from, next) => {
         return next('/login')
     }
 
-    const role = roleByEmail[user.email] || null
+    let role = null
+    try {
+        role = await getRoleForEmail(user.email)
+    } catch (error) {
+        console.error('Role fetch error:', error)
+        return next('/login')
+    }
     if (!role) {
         return next('/login')
     }
