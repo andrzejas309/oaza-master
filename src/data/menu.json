@@ -5,7 +5,7 @@
   { "name": "barszcz czerwony", "price": 10, "category": "zupy" },
   { "name": "chłodnik", "price": 18, "category": "zupy" },
   { "name": "flaczki", "price": 19, "category": "zupy" },
-  { "name": "zupa dnia", "price": 17, "category": "zupy" },
+  { "name": "zupa dnia", "price": 13, "category": "zupy" },
 
   { "name": "kotlet schabowy", "price": 17, "category": "dania główne" },
   { "name": "filet z kurczaka", "price": 17, "category": "dania główne" },
