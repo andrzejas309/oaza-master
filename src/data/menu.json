@@ -23,7 +23,8 @@
   { "name": "sztuka mięsa w sosie chrzanowym lub pieczeniowym", "price": 20, "category": "dania główne" },
   { "name": "gołąbki w sosie pomidorowym", "price": 21, "category": "dania główne" },
   { "name": "pierogi (z mięsem, z kapustą i grzybami lub ruskie)", "price": 22, "category": "dania główne" },
-  { "name": "naleśniki", "price": 18, "category": "dania główne" },
+  { "name": "naleśniki ser", "price": 18, "category": "dania główne" },
+  { "name": "naleśniki dżem", "price": 18, "category": "dania główne" },
   { "name": "świeżonka", "price": 20, "category": "dania główne" },
   { "name": "ozorki w sosie chrzanowym", "price": 20, "category": "dania główne" },
 
