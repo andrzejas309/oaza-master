@@ -5,7 +5,7 @@
   { "name": "barszcz czerwony", "price": 10, "category": "zupy" },
   { "name": "chłodnik", "price": 18, "category": "zupy" },
   { "name": "flaczki", "price": 19, "category": "zupy" },
-  { "name": "zupa dnia", "price": 17, "category": "zupy" },
+  { "name": "zupa dnia", "price": 13, "category": "zupy" },
 
   { "name": "kotlet schabowy", "price": 17, "category": "dania główne" },
   { "name": "filet z kurczaka", "price": 17, "category": "dania główne" },
@@ -22,8 +22,11 @@
   { "name": "pieczeń wołowa w sosie własnym", "price": 30, "category": "dania główne" },
   { "name": "sztuka mięsa w sosie chrzanowym lub pieczeniowym", "price": 20, "category": "dania główne" },
   { "name": "gołąbki w sosie pomidorowym", "price": 21, "category": "dania główne" },
-  { "name": "pierogi (z mięsem, z kapustą i grzybami lub ruskie)", "price": 22, "category": "dania główne" },
-  { "name": "naleśniki", "price": 18, "category": "dania główne" },
+  { "name": "pierogi z mięsem", "price": 22, "category": "dania główne" },
+  { "name": "pierogi z kapustą i grzybami", "price": 22, "category": "dania główne" },
+  { "name": "pierogi ruskie)", "price": 22, "category": "dania główne" },
+  { "name": "naleśniki ser", "price": 18, "category": "dania główne" },
+  { "name": "naleśniki dżem", "price": 18, "category": "dania główne" },
   { "name": "świeżonka", "price": 20, "category": "dania główne" },
   { "name": "ozorki w sosie chrzanowym", "price": 20, "category": "dania główne" },
 
