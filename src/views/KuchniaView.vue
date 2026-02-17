@@ -2,7 +2,11 @@
   <div class="view-container kitchen-layout">
     <header class="kitchen-header">
       <h1 class="title">👩‍🍳 Panel Kuchni</h1>
-      <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button class="btn-outline btn-sm" @click="router.push('/admin')">Admin</button>
+        <button class="btn-outline btn-sm" @click="router.push('/obsluga')">Obsługa</button>
+        <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+      </div>
     </header>
 
     <div class="main-layout">

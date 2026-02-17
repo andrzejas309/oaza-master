@@ -13,7 +13,7 @@ export const roleByEmail = {
     // 'obsluga@example.com': 'obsluga',
     // 'kuchnia@example.com': 'kuchnia',
     // 'admin@example.com': 'admin'
-    'ada.myslinska21@gmail.com': 'obsluga'
+    'ada.myslinska21@gmail.com': 'admin'
 }
 
 const routes = [
@@ -57,7 +57,7 @@ router.beforeEach(async (to, from, next) => {
         return next('/login')
     }
 
-    if (to.meta.role && to.meta.role !== role) {
+    if (to.meta.role && to.meta.role !== role && role !== 'admin') {
         // przekieruj do widoku wynikającego z roli
         if (role === 'obsluga') return next('/obsluga')
         if (role === 'kuchnia') return next('/kuchnia')

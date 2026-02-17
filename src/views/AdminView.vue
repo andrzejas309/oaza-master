@@ -2,7 +2,11 @@
   <div class="view-container">
     <header class="flex flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <h1 style="font-size: 1.75rem; font-weight: 800;">Panel admina</h1>
-      <button class="btn-secondary btn" @click="logout">Wyloguj</button>
+      <div class="flex flex-row" style="gap: 0.5rem; align-items: center;">
+        <button class="btn-secondary btn" @click="router.push('/obsluga')">Obsługa</button>
+        <button class="btn-secondary btn" @click="router.push('/kuchnia')">Kuchnia</button>
+        <button class="btn-secondary btn" @click="logout">Wyloguj</button>
+      </div>
     </header>
 
     <DateFilterBar @change="onFilterChange" />
@@ -14,6 +18,10 @@
         <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
           {{ totalOrders }}
         </p>
+        <h2 style="font-size: 1.25rem; font-weight: 600;">Suma zamówień</h2>
+        <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
+          {{ totalRevenue.toFixed(2) }} zł
+        </p>
       </div>
 
       <div class="card" style="flex: 2;">
@@ -21,9 +29,10 @@
           TOP pozycje
         </h2>
         <ul v-if="topItems.length > 0" class="flex flex-col gap-1">
-          <li v-for="item in topItems" :key="item.name" class="flex flex-row" style="justify-content: space-between;">
-            <span>{{ item.name }}</span>
-            <strong>{{ item.quantity }}</strong>
+          <li v-for="(item, index) in topItems" :key="item.name" class="flex flex-row" style="justify-content: space-between; gap: 0.75rem;">
+            <span style="flex: 1;">{{ index + 1 }}. {{ item.name }}</span>
+            <strong style="min-width: 2.5rem; text-align: right;">x {{ item.quantity }} =</strong>
+            <strong style="min-width: 5.5rem; text-align: right;">{{ item.revenue.toFixed(2) }} zł</strong>
           </li>
         </ul>
         <p v-else style="font-size: 0.9rem; color: #6b7280;">
@@ -37,7 +46,9 @@
       <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">
         Liczba zamówień wg godziny
       </h2>
-      <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
+      <div v-if="chartData" class="chart-wrapper">
+        <Bar :data="chartData" :options="chartOptions" />
+      </div>
       <p v-else style="font-size: 0.9rem; color: #6b7280;">Brak danych do wyświetlenia.</p>
     </section>
   </div>
@@ -52,7 +63,6 @@ import {
   collection,
   getDocs,
   query,
-  where,
   orderBy,
   limit
 } from 'firebase/firestore'
@@ -98,12 +108,11 @@ const getRange = () => {
   return { start, end }
 }
 
-// ⬇️ TU JEST GŁÓWNA ZMIANA: filtrujemy po statusie "gotowe"
+// ⬇️ Pobieramy wszystkie zamówienia (status dowolny)
 const fetchData = async () => {
-  // pobierz TYLKO zamówienia gotowe, posortowane od najnowszych
+  // pobierz zamówienia posortowane od najnowszych
   const q = query(
       collection(db, 'orders'),
-      where('status', '==', 'gotowe'),
       orderBy('createdAt', 'desc'),
       limit(500) // zabezpieczenie, żeby nie wczytywać tysięcy rekordów naraz
   )
@@ -123,15 +132,35 @@ const fetchData = async () => {
 // Metryki
 const totalOrders = computed(() => orders.value.length)
 
-const topItems = computed(() => {
-  const map = {}
+const totalRevenue = computed(() => {
+  let total = 0
   for (const order of orders.value) {
     for (const item of order.items || []) {
-      map[item.name] = (map[item.name] || 0) + (item.quantity || 0)
+      const price = Number(item.finalPrice ?? item.price ?? 0)
+      const qty = Number(item.quantity ?? 1)
+      total += price * qty
+    }
+  }
+  return total
+})
+
+const topItems = computed(() => {
+  const map = {}
+  const revenueMap = {}
+  for (const order of orders.value) {
+    for (const item of order.items || []) {
+      const qty = Number(item.quantity ?? 1)
+      const price = Number(item.finalPrice ?? item.price ?? 0)
+      map[item.name] = (map[item.name] || 0) + qty
+      revenueMap[item.name] = (revenueMap[item.name] || 0) + price * qty
     }
   }
   return Object.entries(map)
-      .map(([name, quantity]) => ({ name, quantity }))
+      .map(([name, quantity]) => ({
+        name,
+        quantity,
+        revenue: revenueMap[name] || 0
+      }))
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 10)
 })
@@ -150,7 +179,7 @@ const chartData = computed(() => {
     labels: counts.map((_, i) => `${i}:00`),
     datasets: [
       {
-        label: 'Liczba zamówień (tylko gotowe)',
+        label: 'Liczba zamówień',
         data: counts
       }
     ]
@@ -180,6 +209,18 @@ fetchData()
 
 
 <style scoped>
+/* Stabilny kontener dla wykresu, aby nie rozjeżdżał układu */
+.chart-wrapper {
+  position: relative;
+  height: 320px;
+  min-height: 240px;
+}
+@media (max-width: 768px) {
+  .chart-wrapper {
+    height: 260px;
+  }
+}
+
 .md\:flex-row {
   flex-direction: row;
 }
