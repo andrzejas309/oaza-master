@@ -74,6 +74,7 @@
                 <span class="muted">
                   ({{ formatPortionLabel(item.quantity) }})
                 </span>
+                <span v-if="item.count > 1" class="count-badge">x{{ item.count }}</span>
               </div>
               <div
                   v-if="item.extras && item.extras.length"
@@ -88,6 +89,21 @@
               <span class="muted">{{ item.finalPrice.toFixed(2) }} zł</span>
 
               <div class="order-item-actions">
+                <button
+                    class="icon-btn add"
+                    @click="increaseOrderItemCount(item.name)"
+                    title="Dodaj jeszcze jedną pozycję"
+                >
+                  +
+                </button>
+                <button
+                    class="icon-btn subtract"
+                    @click="decreaseOrderItemCount(item.name)"
+                    title="Usuń jedną pozycję"
+                    :disabled="item.count <= 1"
+                >
+                  −
+                </button>
                 <button
                     v-if="canEditItem(item)"
                     class="icon-btn edit"
@@ -272,10 +288,6 @@
             {{ p.label }}
           </button>
         </div>
-
-        <button class="btn-outline" @click="portionDialogOpen = false">
-          Anuluj
-        </button>
       </div>
     </div>
 
@@ -321,6 +333,9 @@ const showForm = ref(false)
 const saving = ref(false)
 const activeOrders = ref([])
 const selectedOrderType = ref(null)
+
+// 🔧 Konfiguracja
+const MAX_ORDERS_DISPLAY = 8
 
 // 📦 Pojemniki
 const containerCount = ref(0)
@@ -427,6 +442,7 @@ const ensureEntry = (name) => {
   if (!orderDraft.items[name]) {
     orderDraft.items[name] = {
       quantity: 0,
+      count: 1,
       extras: [],
     }
   }
@@ -472,11 +488,13 @@ const orderItems = computed(() =>
           )
 
           const unitPrice = basePrice + extrasPrice
-          const finalPrice = unitPrice * data.quantity
+          const itemCount = data.count || 1
+          const finalPrice = unitPrice * data.quantity * itemCount
 
           return {
             name,
             quantity: data.quantity,
+            count: itemCount,
             extras: data.extras || [],
             basePrice,
             extrasPrice,
@@ -492,22 +510,22 @@ const totalPrice = computed(() =>
 
 // 📊 Filtrowanie zamówień po typie
 const ordersOnSite = computed(() =>
-    activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, 8)
+    activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, MAX_ORDERS_DISPLAY)
 )
 
 const ordersToGo = computed(() =>
-    activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, 8)
+    activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, MAX_ORDERS_DISPLAY)
 )
 
 // 📋 Liczba zamówień w buforze (czekające na miejsce)
 const onSiteQueueCount = computed(() => {
   const total = activeOrders.value.filter((o) => o.type === 'na_miejscu').length
-  return Math.max(0, total - 8)
+  return Math.max(0, total - MAX_ORDERS_DISPLAY)
 })
 
 const toGoQueueCount = computed(() => {
   const total = activeOrders.value.filter((o) => o.type === 'na_wynos').length
-  return Math.max(0, total - 8)
+  return Math.max(0, total - MAX_ORDERS_DISPLAY)
 })
 
 // usuwanie pozycji
@@ -542,6 +560,20 @@ const increase = (item) => {
   // pozostałe kategorie → domyślnie cała porcja
   const entry = ensureEntry(item.name)
   entry.quantity += 1
+}
+
+const increaseOrderItemCount = (itemName) => {
+  const entry = orderDraft.items[itemName]
+  if (entry) {
+    entry.count = (entry.count || 1) + 1
+  }
+}
+
+const decreaseOrderItemCount = (itemName) => {
+  const entry = orderDraft.items[itemName]
+  if (entry && entry.count > 1) {
+    entry.count -= 1
+  }
 }
 
 // wybór porcji (dodawanie)
@@ -825,7 +857,7 @@ button {
 /* SEKCJA FORMULARZA ZAMÓWIENIA */
 .order-form {
   display: grid;
-  grid-template-columns: 1.6fr 1.2fr;
+  grid-template-columns: 1.5fr 1.5fr;
   column-gap: 1.5rem;
   row-gap: 0.75rem;
   align-items: flex-start;
@@ -898,6 +930,17 @@ button {
   display: flex;
   justify-content: space-between;
   font-size: 0.95rem;
+}
+
+.count-badge {
+  display: inline-block;
+  background: #8fbc8f;
+  color: white;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
 }
 .order-summary {
   display: flex;
@@ -1054,26 +1097,61 @@ button[disabled] {
 
 .order-item-actions {
   display: flex;
-  gap: 0.5rem; /* większa przerwa między przyciskami */
+  gap: 0.4rem;
 }
 
 .order-item-actions button {
-  padding: 0.6rem 1rem; /* większe przyciski */
-  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1.1rem;
 }
 
 .icon-btn {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0.15rem 0.35rem;
+  font-size: 0.95rem;
+  padding: 0.24rem 0.44rem;
   border-radius: 999px;
+}
+
+.icon-btn.add {
+  border: 1px solid #2f9e44;
+  background: #d3f9d8;
+  color: #2f9e44;
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0.38rem 0.56rem;
+}
+
+.icon-btn.add:hover {
+  background: #8fbc8f;
+  color: black;
+}
+
+.icon-btn.subtract {
+  border: 1px solid #cc0000;
+  background: #ffe3e3;
+  color: #cc0000;
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0.38rem 0.56rem;
+}
+
+.icon-btn.subtract:hover:not([disabled]) {
+  background: #ff9999;
+  color: black;
+}
+
+.icon-btn.subtract[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .icon-btn.edit {
   border: 1px solid #f59f00;
   background: #fff7e6;
+  font-size: 0.95rem;
+  padding: 0.24rem 0.44rem;
 }
 
 .icon-btn.edit:hover {
@@ -1083,6 +1161,8 @@ button[disabled] {
 .icon-btn.delete {
   border: 1px solid #e03131;
   background: #ffe3e3;
+  font-size: 0.95rem;
+  padding: 0.24rem 0.44rem;
 }
 
 .icon-btn.delete:hover {
