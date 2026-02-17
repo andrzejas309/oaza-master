@@ -32,6 +32,7 @@
   { "name": "ryż biały", "price": 6, "category": "dodatki" },
   { "name": "kasza gryczana", "price": 6, "category": "dodatki" },
   { "name": "kopytka", "price": 10, "category": "dodatki" },
+  { "name": "pampuchy", "price": 6, "category":  "dodatki"},
 
   { "name": "surówka z marchewki", "price": 7, "category": "surówki" },
   { "name": "surówka z białej kapusty", "price": 7, "category": "surówki" },
