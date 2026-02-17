@@ -20,6 +20,10 @@
     <!-- SEKCJA DODAWANIA ZAMÓWIENIA -->
     <section v-if="showForm" class="card order-form">
       <h2 class="section-title">Nowe zamówienie</h2>
+      <div class="order-type-buttons">
+        <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_miejscu' }" @click="selectedOrderType = 'na_miejscu'">Na miejscu</button>
+        <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_wynos' }" @click="selectedOrderType = 'na_wynos'">Na wynos</button>
+      </div>
       <p class="muted">Kliknij na danie, aby dodać do zamówienia.</p>
 
       <!-- MENU -->
@@ -104,9 +108,21 @@
           </li>
         </ul>
 
-        <p v-else class="muted">Brak pozycji.</p>
+        <!-- POJEMNIKI -->
+        <div class="containers-row">
+          <div class="containers-label">
+            <span>Pojemniki</span>
+          </div>
+          <div class="containers-controls">
+            <button class="counter-btn" @click="decreaseContainers">−</button>
+            <span class="counter-value">{{ containerCount }}</span>
+            <button class="counter-btn" @click="increaseContainers">+</button>
+          </div>
+        </div>
 
-        <div class="order-summary" v-if="orderItems.length">
+        <p v-if="!orderItems.length && containerCount === 0" class="muted">Brak pozycji.</p>
+
+        <div class="order-summary" v-if="orderItems.length || containerCount > 0">
           <span>Razem:</span>
           <strong>{{ totalPrice.toFixed(2) }} zł</strong>
         </div>
@@ -115,7 +131,7 @@
           <button
               class="btn-sage"
               @click="saveOrder"
-              :disabled="!orderItems.length || saving"
+              :disabled="!orderItems.length || saving || !selectedOrderType"
           >
             ✅ {{ saving ? 'Zapisywanie...' : 'Zapisz zamówienie' }}
           </button>
@@ -125,15 +141,23 @@
 
     <!-- SEKCJA AKTYWNYCH ZAMÓWIEŃ -->
     <section class="card orders-section">
-      <h2 class="section-title">Aktualne zamówienia (w toku)</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 class="section-title">Zamówienia na miejscu</h2>
+        <span v-if="onSiteQueueCount > 0" class="queue-badge">Kolejka: {{ onSiteQueueCount }}</span>
+      </div>
       <transition-group name="fade" tag="div" class="orders-list">
         <div
-            v-for="order in activeOrders"
+            v-for="order in ordersOnSite"
             :key="order.id"
             class="order-card"
         >
           <div class="order-info">
-            <div class="order-number">#{{ order.number }}</div>
+            <div class="order-number">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>#{{ order.number }}</span>
+                <span class="order-time">{{ formatTime(order.createdAt) }}</span>
+              </div>
+            </div>
             <div class="order-items">
               <div
                   v-for="item in order.items"
@@ -166,7 +190,7 @@
       </transition-group>
 
       <p
-          v-if="activeOrders.length === 0"
+          v-if="ordersOnSite.length === 0"
           class="muted"
           style="text-align:center;"
       >
@@ -175,11 +199,65 @@
     </section>
 
     <section class="card orders-section">
-      <h2 class="section-title">Oczekujące na odbiór</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 class="section-title">Zamówienia na wynos</h2>
+        <span v-if="toGoQueueCount > 0" class="queue-badge">Kolejka: {{ toGoQueueCount }}</span>
+      </div>
+      <transition-group name="fade" tag="div" class="orders-list">
+        <div
+            v-for="order in ordersToGo"
+            :key="order.id"
+            class="order-card"
+        >
+          <div class="order-info">
+            <div class="order-number">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>#{{ order.number }}</span>
+                <span class="order-time">{{ formatTime(order.createdAt) }}</span>
+              </div>
+            </div>
+            <div class="order-items">
+              <div
+                  v-for="item in order.items"
+                  :key="item.name"
+                  class="order-item"
+              >
+                <div>
+                  {{ item.name }}
+                  <span class="muted">
+                    ({{ formatPortionLabel(item.quantity ?? 1) }})
+                  </span>
+                </div>
+                <div
+                    v-if="item.extras && item.extras.length"
+                    class="muted"
+                    style="font-size: 0.8rem;"
+                >
+                  + {{ item.extras.join(', ') }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+              class="btn-sage-outline btn-sm"
+              @click="markAsReady(order)"
+          >
+            Gotowe
+          </button>
+        </div>
+      </transition-group>
+
+      <p
+          v-if="ordersToGo.length === 0"
+          class="muted"
+          style="text-align:center;"
+      >
+        Brak aktywnych zamówień
+      </p>
     </section>
 
     <!-- OKNO WYBORU PORCJI (DODAWANIE) -->
-    <div v-if="portionDialogOpen" class="portion-dialog-backdrop">
+    <div v-if="portionDialogOpen" class="portion-dialog-backdrop" @click.self="portionDialogOpen = false">
       <div class="portion-dialog">
         <h3>Wybierz porcję</h3>
         <p class="muted">{{ portionDialogItem?.name }}</p>
@@ -202,7 +280,7 @@
     </div>
 
     <!-- POPUP EDYCJI SKŁADNIKÓW -->
-    <div v-if="extrasDialogOpen" class="portion-dialog-backdrop">
+    <div v-if="extrasDialogOpen" class="portion-dialog-backdrop" @click.self="extrasDialogOpen = false">
       <div class="portion-dialog">
         <h3>Składniki dodatkowe</h3>
         <p class="muted">{{ extrasDialogItem?.name }}</p>
@@ -218,17 +296,6 @@
             {{ extra.name }} (+{{ extra.price }} zł)
           </button>
         </div>
-
-        <div
-            style="display:flex; gap:0.5rem; justify-content: center; margin-top:0.5rem;"
-        >
-          <button class="btn-sage" @click="saveExtras">
-            Zapisz
-          </button>
-          <button class="btn-outline" @click="extrasDialogOpen = false">
-            Anuluj
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -236,7 +303,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { auth, db } from '../firebase'
+import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import {
   collection,
@@ -253,6 +320,15 @@ const router = useRouter()
 const showForm = ref(false)
 const saving = ref(false)
 const activeOrders = ref([])
+const selectedOrderType = ref(null)
+
+// 📦 Pojemniki
+const containerCount = ref(0)
+const containerPrice = computed(() => {
+  const container = menu.find((m) => m.name === 'pojemniki')
+  return container ? container.price : 0
+})
+const containersPrice = computed(() => containerCount.value * containerPrice.value)
 
 // orderDraft.items: { [name]: { quantity: number, extras: string[] } }
 const orderDraft = reactive({ items: {} })
@@ -269,11 +345,13 @@ const EXTRAS = [
   { name: 'ser', price: 3 },
   { name: 'porcja uszek', price: 6 },
   { name: 'porcja makaronu', price: 3 },
+  { name: 'porcja ryżu', price: 3 },
   { name: 'bez kiełbasy', price: 0 },
   { name: 'bez sosu', price: 0 },
   { name: 'bez sera', price: 0 },
   { name: 'bez ananasa', price: 0 },
   { name: 'w panierce z mąki', price: 0 },
+  { name: 'pieczywo', price: 1 },
 ]
 const EXTRAS_PRICE = EXTRAS.reduce((map, e) => {
   map[e.name] = e.price
@@ -285,7 +363,7 @@ const EXTRAS_FOR_MAIN = EXTRAS.filter(
     (e) => e.name !== 'porcja uszek' && e.name !== 'porcja makaronu' && e.name !== 'bez kiełbasy',
 )
 const EXTRAS_FOR_SOUPS = EXTRAS.filter(
-    (e) => e.name === 'porcja uszek' || e.name === 'porcja makaronu' || e.name === 'bez kiełbasy',
+    (e) => e.name === 'porcja uszek' || e.name === 'porcja makaronu' || e.name === 'porcja ryżu' || e.name === 'bez kiełbasy' || e.name === 'pieczywo',
 )
 
 // aktualnie używana lista w popupie składników
@@ -409,8 +487,28 @@ const orderItems = computed(() =>
 )
 
 const totalPrice = computed(() =>
-    orderItems.value.reduce((sum, item) => sum + item.finalPrice, 0),
+    orderItems.value.reduce((sum, item) => sum + item.finalPrice, 0) + containersPrice.value
 )
+
+// 📊 Filtrowanie zamówień po typie
+const ordersOnSite = computed(() =>
+    activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, 8)
+)
+
+const ordersToGo = computed(() =>
+    activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, 8)
+)
+
+// 📋 Liczba zamówień w buforze (czekające na miejsce)
+const onSiteQueueCount = computed(() => {
+  const total = activeOrders.value.filter((o) => o.type === 'na_miejscu').length
+  return Math.max(0, total - 8)
+})
+
+const toGoQueueCount = computed(() => {
+  const total = activeOrders.value.filter((o) => o.type === 'na_wynos').length
+  return Math.max(0, total - 8)
+})
 
 // usuwanie pozycji
 const removeItem = (item) => {
@@ -489,6 +587,8 @@ const toggleExtra = (name) => {
   } else {
     extrasSelected.value.splice(idx, 1)
   }
+
+  saveExtras()
 }
 
 const saveExtras = () => {
@@ -522,10 +622,14 @@ const saveOrder = async () => {
   await addDoc(collection(db, 'orders'), {
     number: Date.now(),
     items: orderItems.value,
+    containers: containerCount.value,
+    type: selectedOrderType.value,
     status: 'w_toku',
     createdAt: serverTimestamp(),
   })
   orderDraft.items = {}
+  selectedOrderType.value = null
+  containerCount.value = 0
   showForm.value = false
   saving.value = false
 }
@@ -535,10 +639,36 @@ const markAsReady = async (order) => {
   await updateDoc(doc(db, 'orders', order.id), { status: 'gotowe' })
 }
 
-const toggleOrderForm = () => (showForm.value = !showForm.value)
+const toggleOrderForm = () => {
+  showForm.value = !showForm.value
+  if (!showForm.value) {
+    // Zeruj zamówienie przy zamknięciu formularza
+    orderDraft.items = {}
+    selectedOrderType.value = null
+    containerCount.value = 0
+  }
+}
+
+const increaseContainers = () => {
+  containerCount.value++
+}
+
+const decreaseContainers = () => {
+  if (containerCount.value > 0) {
+    containerCount.value--
+  }
+}
 const logout = async () => {
   await signOut(auth)
   router.replace('/login')
+}
+
+const formatTime = (ts) => {
+  if (!ts?.seconds) return ''
+  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 </script>
 
@@ -606,7 +736,6 @@ button {
   font-family: inherit;
 }
 
-.btn,
 .btn-outline,
 .btn-sage,
 .btn-sage-outline {
@@ -664,6 +793,33 @@ button {
   margin-top: 1rem;
   display: flex;
   justify-content: flex-end;
+}
+
+/* Przyciski typu zamówienia */
+.order-type-buttons {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1rem;
+  grid-column: 1 / -1;
+  justify-content: center;
+  align-items: center;
+}
+
+.order-type-pill {
+  border-radius: 9999px;
+  background: #e5e7eb;
+  padding: 1rem 2.5rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s ease;
+}
+
+.order-type-pill.active {
+  background: #8fbc8f;
+  color: black;
+  box-shadow: 0 0 0 2px var(--green-soft);
 }
 
 /* SEKCJA FORMULARZA ZAMÓWIENIA */
@@ -773,6 +929,16 @@ button[disabled] {
 .orders-section {
   margin-top: 1.5rem;
 }
+
+.queue-badge {
+  background: #ffcccc;
+  color: #cc0000;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
 .orders-list {
   display: flex;
   flex-direction: column;
@@ -800,6 +966,12 @@ button[disabled] {
   color: var(--orange-dark);
   margin-bottom: 0.2rem;
 }
+.order-time {
+   font-size: 1.1rem;
+   font-weight: 700;
+   color: var(--muted);
+  margin-left: 1rem;
+}
 .order-items {
   font-size: 0.9rem;
   color: var(--muted);
@@ -816,17 +988,6 @@ button[disabled] {
 }
 .muted {
   color: var(--muted);
-}
-
-/* ANIMACJE */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.25s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 /* RWD – węższe ekrany */
@@ -927,4 +1088,56 @@ button[disabled] {
 .icon-btn.delete:hover {
   background: #ffc9c9;
 }
+
+/* Pojemniki */
+.containers-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid #e5e7eb;
+}
+
+.containers-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.containers-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.counter-btn {
+  background: #8fbc8f;
+  color: black;
+  border: none;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1.2rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter-btn:hover {
+  background: var(--green-dark);
+  transform: scale(1.1);
+}
+
+.counter-value {
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
 </style>

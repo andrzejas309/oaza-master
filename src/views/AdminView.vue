@@ -22,6 +22,10 @@
         <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
           {{ totalRevenue.toFixed(2) }} zł
         </p>
+        <h2 style="font-size: 1.25rem; font-weight: 600;">Wydane pojemniki</h2>
+        <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
+          {{ totalContainers }}
+        </p>
       </div>
 
       <div class="card" style="flex: 2;">
@@ -140,6 +144,14 @@ const totalRevenue = computed(() => {
       const qty = Number(item.quantity ?? 1)
       total += price * qty
     }
+  }
+  return total
+})
+
+const totalContainers = computed(() => {
+  let total = 0
+  for (const order of orders.value) {
+    total += Number(order.containers ?? 0)
   }
   return total
 })

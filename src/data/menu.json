@@ -1,6 +1,7 @@
 [
   { "name": "rosół", "price": 10, "category": "zupy" },
-  { "name": "pomidorowa", "price": 13, "category": "zupy" },
+  { "name": "pomidorowa z ryżem", "price": 13, "category": "zupy" },
+  { "name": "pomidorowa z makaronem", "price": 13, "category": "zupy" },
   { "name": "żurek z kiełbaską", "price": 16, "category": "zupy" },
   { "name": "barszcz czerwony", "price": 10, "category": "zupy" },
   { "name": "chłodnik", "price": 18, "category": "zupy" },
@@ -63,5 +64,7 @@
   { "name": "cebula", "price":  3, "category": "składniki" },
   { "name": "ser", "price":  3, "category": "składniki" },
   { "name": "porcja uszek", "price":  6, "category": "składniki" },
-  { "name": "porcjca makaronu", "price":  3, "category": "składniki" }
+  { "name": "porcjca makaronu", "price":  3, "category": "składniki" },
+
+  { "name":  "pojemniki", "price":  1, "category": "opakowania" }
 ]
