@@ -30,12 +30,11 @@
         </button>
 
         <p v-if="error" style="color: #b91c1c; font-size: 0.9rem;">{{ error }}</p>
-
-        <p style="font-size: 0.8rem; color: #6b7280;">
-          Testowo możesz np. założyć konta:
-          <br>
-          obsluga@example.com, kuchnia@example.com, admin@example.com
-        </p>
+<!--        <p style="font-size: 0.8rem; color: #6b7280;">-->
+<!--          Testowo możesz np. założyć konta:-->
+<!--          <br>-->
+<!--          obsluga@example.com, kuchnia@example.com, admin@example.com-->
+<!--        </p>-->
       </form>
     </div>
   </div>

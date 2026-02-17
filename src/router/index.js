@@ -6,19 +6,20 @@ const LoginView = () => import('../views/LoginView.vue')
 const ObslugaView = () => import('../views/ObslugaView.vue')
 const KuchniaView = () => import('../views/KuchniaView.vue')
 const AdminView = () => import('../views/AdminView.vue')
-const DevSeedView = () => import('../views/DevSeedView.vue')
+// const DevSeedView = () => import('../views/DevSeedView.vue')
 
 // Mapowanie email → rola
 export const roleByEmail = {
-    'obsluga@example.com': 'obsluga',
-    'kuchnia@example.com': 'kuchnia',
-    'admin@example.com': 'admin'
+    // 'obsluga@example.com': 'obsluga',
+    // 'kuchnia@example.com': 'kuchnia',
+    // 'admin@example.com': 'admin'
+    'ada.myslinska21@gmail.com': 'obsluga'
 }
 
 const routes = [
     { path: '/', redirect: '/login' },
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
-    { path: '/dev-seed', name: 'dev-seed', component: DevSeedView, meta: { public: true } }, // <== NOWE
+    // { path: '/dev-seed', name: 'dev-seed', component: DevSeedView, meta: { public: true } }, // <== NOWE
     { path: '/obsluga', name: 'obsluga', component: ObslugaView, meta: { role: 'obsluga' } },
     { path: '/kuchnia', name: 'kuchnia', component: KuchniaView, meta: { role: 'kuchnia' } },
     { path: '/admin', name: 'admin', component: AdminView, meta: { role: 'admin' } },
