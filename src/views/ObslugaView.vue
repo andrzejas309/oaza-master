@@ -367,6 +367,14 @@ const EXTRAS = [
   { name: 'bez ananasa', price: 0 },
   { name: 'w panierce z mąki', price: 0 },
   { name: 'pieczywo', price: 1 },
+  { name: 'bez ziela', price: 0 },
+]
+
+// 📌 OPCJE dla dodatków
+const EXTRAS_FOR_SIDES = [
+  { name: 'z sosem', price: 0 },
+  { name: 'ubite', price: 0 },
+  { name: 'bez ziela', price: 0 },
 ]
 const EXTRAS_PRICE = EXTRAS.reduce((map, e) => {
   map[e.name] = e.price
@@ -378,7 +386,7 @@ const EXTRAS_FOR_MAIN = EXTRAS.filter(
     (e) => e.name !== 'porcja uszek' && e.name !== 'porcja makaronu' && e.name !== 'bez kiełbasy',
 )
 const EXTRAS_FOR_SOUPS = EXTRAS.filter(
-    (e) => e.name === 'porcja uszek' || e.name === 'porcja makaronu' || e.name === 'porcja ryżu' || e.name === 'bez kiełbasy' || e.name === 'pieczywo',
+    (e) => e.name === 'porcja uszek' || e.name === 'porcja makaronu' || e.name === 'porcja ryżu' || e.name === 'bez kiełbasy' || e.name === 'pieczywo' || e.name === 'bez ziela',
 )
 
 // aktualnie używana lista w popupie składników
@@ -449,11 +457,11 @@ const ensureEntry = (name) => {
   return orderDraft.items[name]
 }
 
-// 📌 czy pozycja może być edytowana (tylko zupy i dania główne)
+// 📌 czy pozycja może być edytowana (tylko zupy, dania główne i dodatki)
 const canEditItem = (orderItem) => {
   const base = menu.find((m) => m.name === orderItem.name)
   if (!base) return false
-  return base.category === 'zupy' || base.category === 'dania główne'
+  return base.category === 'zupy' || base.category === 'dania główne' || base.category === 'dodatki'
 }
 
 // 📌 Menu pogrupowane wg kategorii
@@ -593,13 +601,16 @@ const startEditItem = (orderItem) => {
   const base = menu.find((m) => m.name === orderItem.name)
   if (!base) return
 
-  // tylko dla zup i dań głównych
+  // wybierz opcje dla kategorii
   if (base.category === 'dania główne') {
     // dania główne: bez porcji uszek i makaronu
     extrasOptions.value = EXTRAS_FOR_MAIN
   } else if (base.category === 'zupy') {
     // zupy: tylko porcja uszek i makaronu
     extrasOptions.value = EXTRAS_FOR_SOUPS
+  } else if (base.category === 'dodatki') {
+    // dodatki: z sosem i ubite
+    extrasOptions.value = EXTRAS_FOR_SIDES
   } else {
     // inne kategorie – nie pozwalamy na edycję
     return
