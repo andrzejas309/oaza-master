@@ -13,7 +13,7 @@ export const roleByEmail = {
     // 'obsluga@example.com': 'obsluga',
     // 'kuchnia@example.com': 'kuchnia',
     // 'admin@example.com': 'admin'
-    'ada.myslinska21@gmail.com': 'obsluga'
+    'ada.myslinska21@gmail.com': 'admin'
 }
 
 const routes = [
