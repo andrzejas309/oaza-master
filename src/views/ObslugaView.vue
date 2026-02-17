@@ -3,7 +3,11 @@
     <!-- HEADER -->
     <header class="obsluga-header">
       <h1 class="obsluga-title">Panel Obsługi</h1>
-      <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button class="btn-outline btn-sm" @click="router.push('/admin')">Admin</button>
+        <button class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
+        <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+      </div>
     </header>
 
     <!-- AKCJE -->
