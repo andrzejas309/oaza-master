@@ -25,12 +25,15 @@
   { "name": "sztuka mięsa w sosie pieczeniowym", "price": 20, "category": "dania główne" },
   { "name": "sztuka mięsa w sosie chrzanowym", "price": 20, "category": "dania główne" },
   { "name": "gołąbki w sosie pomidorowym", "price": 21, "category": "dania główne" },
+  { "name": "gołąbki \"pęczak\"", "price": 22, "category": "dania główne" },
   { "name": "pierogi z mięsem", "price": 22, "category": "dania główne" },
   { "name": "pierogi z kapustą i grzybami", "price": 22, "category": "dania główne" },
   { "name": "pierogi ruskie", "price": 22, "category": "dania główne" },
+  { "name": "ryba po grecku", "price": 25, "category": "dania główne" },
   { "name": "naleśniki ser", "price": 18, "category": "dania główne" },
   { "name": "naleśniki dżem", "price": 18, "category": "dania główne" },
   { "name": "świeżonka", "price": 20, "category": "dania główne" },
+  { "name": "śledź pod pierzynką", "price": 20, "category": "dania główne" },
   { "name": "ozorki w sosie chrzanowym", "price": 20, "category": "dania główne" },
 
   { "name": "ziemniaki z wody", "price": 6, "category": "dodatki" },
@@ -50,6 +53,10 @@
   { "name": "kapusta zasmażana", "price": 12, "category": "surówki" },
   { "name": "buraczki zasmażane", "price": 12, "category": "surówki" },
   { "name": "marchewka zasmażana", "price": 12, "category": "surówki" },
+  { "name": "surówka z czerwonej kapusty", "price": 7, "category": "surówki" },
+  { "name": "surówka z włoskiej kapusty", "price": 7, "category": "surówki" },
+  { "name": "surówka z pora", "price": 7, "category": "surówki" },
+
 
   { "name": "kompot lub maślanka", "price": 3, "category": "napoje" },
   { "name": "kawa rozpuszczalna", "price": 10, "category": "napoje" },
