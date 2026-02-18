@@ -59,17 +59,11 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebase'
 import { useRouter } from 'vue-router'
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  limit
-} from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
 import { Bar } from 'vue-chartjs'
 
@@ -77,48 +71,28 @@ const router = useRouter()
 const orders = ref([])
 const filter = ref({ mode: 'day', date: null, month: null, year: null })
 
+// ==================== Lifecycle ====================
+onMounted(() => {
+  fetchData()
+})
+
+// ==================== Auth ====================
 const logout = async () => {
   await signOut(auth)
   router.replace('/login')
 }
 
-// zmiana filtra → ustawiamy filter i JEDEN raz wywołujemy fetchData
+// ==================== Data Fetching ====================
 const onFilterChange = (f) => {
   filter.value = f
   fetchData()
 }
 
-const getRange = () => {
-  const mode = filter.value.mode
-  let start, end
-
-  if (mode === 'day' && filter.value.date) {
-    start = new Date(filter.value.date + 'T00:00:00')
-    end = new Date(filter.value.date + 'T23:59:59')
-  } else if (mode === 'month' && filter.value.month) {
-    const [y, m] = filter.value.month.split('-').map(Number)
-    start = new Date(y, m - 1, 1, 0, 0, 0)
-    end = new Date(y, m, 0, 23, 59, 59)
-  } else if (mode === 'year' && filter.value.year) {
-    const y = filter.value.year
-    start = new Date(y, 0, 1, 0, 0, 0)
-    end = new Date(y, 11, 31, 23, 59, 59)
-  } else {
-    const now = new Date()
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
-  }
-
-  return { start, end }
-}
-
-// ⬇️ Pobieramy wszystkie zamówienia (status dowolny)
 const fetchData = async () => {
-  // pobierz zamówienia posortowane od najnowszych
   const q = query(
-      collection(db, 'orders'),
-      orderBy('createdAt', 'desc'),
-      limit(500) // zabezpieczenie, żeby nie wczytywać tysięcy rekordów naraz
+    collection(db, 'orders'),
+    orderBy('createdAt', 'desc'),
+    limit(500)
   )
 
   const snap = await getDocs(q)
@@ -132,69 +106,64 @@ const fetchData = async () => {
   })
 }
 
-
-// Metryki
+// ==================== Computed Metrics ====================
 const totalOrders = computed(() => orders.value.length)
 
 const totalRevenue = computed(() => {
-  let total = 0
-  for (const order of orders.value) {
-    for (const item of order.items || []) {
+  return orders.value.reduce((total, order) => {
+    const orderTotal = (order.items || []).reduce((sum, item) => {
       const price = Number(item.finalPrice ?? item.price ?? 0)
       const qty = Number(item.quantity ?? 1)
-      total += price * qty
-    }
-  }
-  return total
+      return sum + (price * qty)
+    }, 0)
+    return total + orderTotal
+  }, 0)
 })
 
 const totalContainers = computed(() => {
-  let total = 0
-  for (const order of orders.value) {
-    total += Number(order.containers ?? 0)
-  }
-  return total
+  return orders.value.reduce((total, order) => {
+    return total + Number(order.containers ?? 0)
+  }, 0)
 })
 
 const topItems = computed(() => {
-  const map = {}
-  const revenueMap = {}
-  for (const order of orders.value) {
-    for (const item of order.items || []) {
+  const itemStats = orders.value.reduce((acc, order) => {
+    (order.items || []).forEach(item => {
       const qty = Number(item.quantity ?? 1)
       const price = Number(item.finalPrice ?? item.price ?? 0)
-      map[item.name] = (map[item.name] || 0) + qty
-      revenueMap[item.name] = (revenueMap[item.name] || 0) + price * qty
-    }
-  }
-  return Object.entries(map)
-      .map(([name, quantity]) => ({
-        name,
-        quantity,
-        revenue: revenueMap[name] || 0
-      }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 10)
+      const revenue = price * qty
+
+      if (!acc[item.name]) {
+        acc[item.name] = { quantity: 0, revenue: 0 }
+      }
+      acc[item.name].quantity += qty
+      acc[item.name].revenue += revenue
+    })
+    return acc
+  }, {})
+
+  return Object.entries(itemStats)
+    .map(([name, stats]) => ({ name, ...stats }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10)
 })
 
-// Wykres: liczba zamówień wg godziny (0–23)
+// ==================== Chart Configuration ====================
 const chartData = computed(() => {
   if (!orders.value.length) return null
 
   const counts = Array(24).fill(0)
-  for (const order of orders.value) {
+  orders.value.forEach(order => {
     const hour = order.createdAt.getHours()
     counts[hour]++
-  }
+  })
 
   return {
     labels: counts.map((_, i) => `${i}:00`),
-    datasets: [
-      {
-        label: 'Liczba zamówień',
-        data: counts
-      }
-    ]
+    datasets: [{
+      label: 'Liczba zamówień',
+      data: counts
+    }]
   }
 })
 
@@ -214,9 +183,6 @@ const chartOptions = {
     }
   }
 }
-
-// 🔁 inicjalne pobranie TYLKO raz przy wejściu na stronę
-fetchData()
 </script>
 
 

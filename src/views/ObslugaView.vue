@@ -329,30 +329,22 @@ import menuJson from '../data/menu.json'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const showForm = ref(false)
-const saving = ref(false)
-const activeOrders = ref([])
-const selectedOrderType = ref(null)
 
-// 🔧 Konfiguracja
+// ==================== Constants ====================
 const MAX_ORDERS_DISPLAY = 8
 
-// 📦 Pojemniki
-const containerCount = ref(0)
-const containerPrice = computed(() => {
-  const container = menu.find((m) => m.name === 'pojemniki')
-  return container ? container.price : 0
-})
-const containersPrice = computed(() => containerCount.value * containerPrice.value)
+const PORTIONS_FULL = [
+  { label: 'Cała porcja', value: 1 },
+  { label: 'Pół', value: 0.5 },
+  { label: 'Półtora', value: 1.5 },
+  { label: 'Podwójna', value: 2 },
+]
 
-// orderDraft.items: { [name]: { quantity: number, extras: string[] } }
-const orderDraft = reactive({ items: {} })
+const PORTIONS_HALF = [
+  { label: 'Cała porcja', value: 1 },
+  { label: 'Pół', value: 0.5 },
+]
 
-// 📌 Kategorie – zamiast alfabetu
-const categoryList = ['zupy', 'dania główne', 'dodatki', 'surówki', 'napoje', 'składniki']
-const selectedCategory = ref('zupy')
-
-// 📌 SKŁADNIKI dodatkowe
 const EXTRAS = [
   { name: 'jajko', price: 3 },
   { name: 'pieczarki', price: 3 },
@@ -370,49 +362,25 @@ const EXTRAS = [
   { name: 'bez ziela', price: 0 },
 ]
 
-// 📌 OPCJE dla dodatków
 const EXTRAS_FOR_SIDES = [
   { name: 'z sosem', price: 0 },
   { name: 'ubite', price: 0 },
   { name: 'bez ziela', price: 0 },
 ]
+
+const EXTRAS_FOR_MAIN = EXTRAS.filter(
+  (e) => e.name !== 'porcja uszek' && e.name !== 'porcja makaronu' && e.name !== 'bez kiełbasy',
+)
+
+const EXTRAS_FOR_SOUPS = EXTRAS.filter(
+  (e) => ['porcja uszek', 'porcja makaronu', 'porcja ryżu', 'bez kiełbasy', 'pieczywo', 'bez ziela'].includes(e.name),
+)
+
 const EXTRAS_PRICE = EXTRAS.reduce((map, e) => {
   map[e.name] = e.price
   return map
 }, {})
 
-// warianty składników dla różnych kategorii
-const EXTRAS_FOR_MAIN = EXTRAS.filter(
-    (e) => e.name !== 'porcja uszek' && e.name !== 'porcja makaronu' && e.name !== 'bez kiełbasy',
-)
-const EXTRAS_FOR_SOUPS = EXTRAS.filter(
-    (e) => e.name === 'porcja uszek' || e.name === 'porcja makaronu' || e.name === 'porcja ryżu' || e.name === 'bez kiełbasy' || e.name === 'pieczywo' || e.name === 'bez ziela',
-)
-
-// aktualnie używana lista w popupie składników
-const extrasOptions = ref(EXTRAS)
-
-// 🔢 popup porcji (dodawanie)
-const portionDialogOpen = ref(false)
-const portionDialogItem = ref(null)
-
-// pełne opcje porcji (dla zup — z wyjątkiem wykluczonych)
-const PORTIONS_FULL = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół', value: 0.5 },
-  { label: 'Półtora', value: 1.5 },
-  { label: 'Podwójna', value: 2 },
-]
-
-// skrócone opcje porcji (dla dodatków i surówek)
-const PORTIONS_HALF = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół', value: 0.5 },
-]
-
-const PORTIONS = ref(PORTIONS_FULL)
-
-// wyjątki dla porcji – zupy bez popupu
 const portionExcluded = [
   'rosół',
   'barszcz czerwony',
@@ -421,50 +389,49 @@ const portionExcluded = [
   'żurek z kiełbaską',
 ]
 
-const formatPortionLabel = (val) => {
-  if (val == null) return '1 porcja'
-  switch (val) {
-    case 1:
-      return 'cała porcja'
-    case 0.5:
-      return '½ porcji'
-    case 1.5:
-      return '1 ½ porcji'
-    case 2:
-      return 'podwójna porcja'
-    default:
-      return val + ' porcji'
-  }
-}
+const categoryList = ['zupy', 'dania główne', 'dodatki', 'surówki', 'napoje', 'składniki']
 
-// popup edycji SKŁADNIKÓW
+const menu = menuJson
+
+// ==================== State ====================
+const showForm = ref(false)
+const saving = ref(false)
+const activeOrders = ref([])
+const selectedOrderType = ref(null)
+const selectedCategory = ref('zupy')
+const containerCount = ref(0)
+const orderDraft = reactive({ items: {} })
+
+// Dialog state
+const portionDialogOpen = ref(false)
+const portionDialogItem = ref(null)
+const PORTIONS = ref(PORTIONS_FULL)
 const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
 const extrasSelected = ref([])
+const extrasOptions = ref(EXTRAS)
 
-// 📌 Konwersja menu JSON – tablica [{ name, price, category }]
-const menu = menuJson
+let unsub = null
 
-// helper – upewnij się, że w orderDraft.items istnieje wpis
-const ensureEntry = (name) => {
-  if (!orderDraft.items[name]) {
-    orderDraft.items[name] = {
-      quantity: 0,
-      count: 1,
-      extras: [],
-    }
-  }
-  return orderDraft.items[name]
-}
+// ==================== Lifecycle ====================
+onMounted(() => {
+  unsub = onSnapshot(collection(db, 'orders'), (snap) => {
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    activeOrders.value = all.filter((o) => o.status === 'w_toku')
+  })
+})
 
-// 📌 czy pozycja może być edytowana (tylko zupy, dania główne i dodatki)
-const canEditItem = (orderItem) => {
-  const base = menu.find((m) => m.name === orderItem.name)
-  if (!base) return false
-  return base.category === 'zupy' || base.category === 'dania główne' || base.category === 'dodatki'
-}
+onUnmounted(() => unsub && unsub())
 
-// 📌 Menu pogrupowane wg kategorii
+// ==================== Computed - Containers ====================
+const containerPrice = computed(() => {
+  const container = menu.find((m) => m.name === 'pojemniki')
+  return container ? container.price : 0
+})
+
+const containersPrice = computed(() => containerCount.value * containerPrice.value)
+
+// ==================== Computed - Menu ====================
 const filteredMenu = computed(() => {
   const grouped = {}
 
@@ -482,50 +449,49 @@ const filteredMenu = computed(() => {
   }
 })
 
-// 🔢 Zamówienie – z uwzględnieniem składników
+// ==================== Computed - Order Items ====================
 const orderItems = computed(() =>
-    Object.entries(orderDraft.items)
-        .filter(([, data]) => data.quantity > 0)
-        .map(([name, data]) => {
-          const found = menu.find((m) => m.name === name)
-          const basePrice = found?.price || 0
+  Object.entries(orderDraft.items)
+    .filter(([, data]) => data.quantity > 0)
+    .map(([name, data]) => {
+      const found = menu.find((m) => m.name === name)
+      const basePrice = found?.price || 0
 
-          const extrasPrice = (data.extras || []).reduce(
-              (sum, extraName) => sum + (EXTRAS_PRICE[extraName] || 0),
-              0,
-          )
+      const extrasPrice = (data.extras || []).reduce(
+        (sum, extraName) => sum + (EXTRAS_PRICE[extraName] || 0),
+        0,
+      )
 
-          const unitPrice = basePrice + extrasPrice
-          const itemCount = data.count || 1
-          const finalPrice = unitPrice * data.quantity * itemCount
+      const unitPrice = basePrice + extrasPrice
+      const itemCount = data.count || 1
+      const finalPrice = unitPrice * data.quantity * itemCount
 
-          return {
-            name,
-            quantity: data.quantity,
-            count: itemCount,
-            extras: data.extras || [],
-            basePrice,
-            extrasPrice,
-            unitPrice,
-            finalPrice,
-          }
-        }),
+      return {
+        name,
+        quantity: data.quantity,
+        count: itemCount,
+        extras: data.extras || [],
+        basePrice,
+        extrasPrice,
+        unitPrice,
+        finalPrice,
+      }
+    }),
 )
 
 const totalPrice = computed(() =>
-    orderItems.value.reduce((sum, item) => sum + item.finalPrice, 0) + containersPrice.value
+  orderItems.value.reduce((sum, item) => sum + item.finalPrice, 0) + containersPrice.value
 )
 
-// 📊 Filtrowanie zamówień po typie
+// ==================== Computed - Orders Filtering ====================
 const ordersOnSite = computed(() =>
-    activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, MAX_ORDERS_DISPLAY)
+  activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, MAX_ORDERS_DISPLAY)
 )
 
 const ordersToGo = computed(() =>
-    activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, MAX_ORDERS_DISPLAY)
+  activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, MAX_ORDERS_DISPLAY)
 )
 
-// 📋 Liczba zamówień w buforze (czekające na miejsce)
 const onSiteQueueCount = computed(() => {
   const total = activeOrders.value.filter((o) => o.type === 'na_miejscu').length
   return Math.max(0, total - MAX_ORDERS_DISPLAY)
@@ -536,36 +502,67 @@ const toGoQueueCount = computed(() => {
   return Math.max(0, total - MAX_ORDERS_DISPLAY)
 })
 
-// usuwanie pozycji
+// ==================== Helper Functions ====================
+const ensureEntry = (name) => {
+  if (!orderDraft.items[name]) {
+    orderDraft.items[name] = {
+      quantity: 0,
+      count: 1,
+      extras: [],
+    }
+  }
+  return orderDraft.items[name]
+}
+
+const canEditItem = (orderItem) => {
+  const base = menu.find((m) => m.name === orderItem.name)
+  if (!base) return false
+  return ['zupy', 'dania główne', 'dodatki'].includes(base.category)
+}
+
+const formatPortionLabel = (val) => {
+  if (val == null) return '1 porcja'
+  const labels = {
+    1: 'cała porcja',
+    0.5: '½ porcji',
+    1.5: '1 ½ porcji',
+    2: 'podwójna porcja'
+  }
+  return labels[val] || `${val} porcji`
+}
+
+const formatTime = (ts) => {
+  if (!ts?.seconds) return ''
+  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// ==================== Order Item Management ====================
 const removeItem = (item) => {
   delete orderDraft.items[item.name]
 }
 
-// dodawanie pozycji (klik w menu)
 const increase = (item) => {
   const portionCategories = ['zupy', 'dodatki', 'surówki']
 
-  // wyjątki — te zupy nie mają popupu
   if (portionExcluded.includes(item.name)) {
     const entry = ensureEntry(item.name)
     entry.quantity += 1
     return
   }
 
-  // jeśli wymaga wyboru porcji
   if (portionCategories.includes(item.category)) {
-    if (['dodatki', 'surówki'].includes(item.category)) {
-      PORTIONS.value = PORTIONS_HALF
-    } else if (item.category === 'zupy') {
-      PORTIONS.value = PORTIONS_FULL
-    }
+    PORTIONS.value = ['dodatki', 'surówki'].includes(item.category)
+      ? PORTIONS_HALF
+      : PORTIONS_FULL
 
     portionDialogItem.value = item
     portionDialogOpen.value = true
     return
   }
 
-  // pozostałe kategorie → domyślnie cała porcja
   const entry = ensureEntry(item.name)
   entry.quantity += 1
 }
@@ -584,7 +581,7 @@ const decreaseOrderItemCount = (itemName) => {
   }
 }
 
-// wybór porcji (dodawanie)
+// ==================== Portion Dialog ====================
 const choosePortion = (value) => {
   const item = portionDialogItem.value
   if (!item) return
@@ -596,26 +593,21 @@ const choosePortion = (value) => {
   portionDialogItem.value = null
 }
 
-// start edycji (SKŁADNIKI, tylko zupy i dania główne)
+// ==================== Extras Dialog ====================
 const startEditItem = (orderItem) => {
   const base = menu.find((m) => m.name === orderItem.name)
   if (!base) return
 
-  // wybierz opcje dla kategorii
-  if (base.category === 'dania główne') {
-    // dania główne: bez porcji uszek i makaronu
-    extrasOptions.value = EXTRAS_FOR_MAIN
-  } else if (base.category === 'zupy') {
-    // zupy: tylko porcja uszek i makaronu
-    extrasOptions.value = EXTRAS_FOR_SOUPS
-  } else if (base.category === 'dodatki') {
-    // dodatki: z sosem i ubite
-    extrasOptions.value = EXTRAS_FOR_SIDES
-  } else {
-    // inne kategorie – nie pozwalamy na edycję
-    return
+  const categoryExtras = {
+    'dania główne': EXTRAS_FOR_MAIN,
+    'zupy': EXTRAS_FOR_SOUPS,
+    'dodatki': EXTRAS_FOR_SIDES
   }
 
+  const extras = categoryExtras[base.category]
+  if (!extras) return
+
+  extrasOptions.value = extras
   extrasDialogItem.value = base
   const current = orderDraft.items[orderItem.name]
   extrasSelected.value = current?.extras ? [...current.extras] : []
@@ -645,20 +637,28 @@ const saveExtras = () => {
   extrasDialogItem.value = null
 }
 
-// 🔁 Firestore realtime
-let unsub = null
-onMounted(() => {
-  unsub = onSnapshot(collection(db, 'orders'), (snap) => {
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+// ==================== Container Management ====================
+const increaseContainers = () => {
+  containerCount.value++
+}
 
-    // Uwaga: jeśli w starszych zamówieniach items nie mają pola extras,
-    // Firestore zwróci po prostu obiekty bez tego pola – UI i tak to obsłuży.
-    activeOrders.value = all.filter((o) => o.status === 'w_toku')
-  })
-})
-onUnmounted(() => unsub && unsub())
+const decreaseContainers = () => {
+  if (containerCount.value > 0) {
+    containerCount.value--
+  }
+}
 
-// 🧾 Zapisywanie zamówienia
+// ==================== Form Management ====================
+const toggleOrderForm = () => {
+  showForm.value = !showForm.value
+  if (!showForm.value) {
+    orderDraft.items = {}
+    selectedOrderType.value = null
+    containerCount.value = 0
+  }
+}
+
+// ==================== Order Operations ====================
 const saveOrder = async () => {
   if (!orderItems.value.length) return
   saving.value = true
@@ -677,41 +677,14 @@ const saveOrder = async () => {
   saving.value = false
 }
 
-// 🔥 Oznacz jako gotowe
 const markAsReady = async (order) => {
   await updateDoc(doc(db, 'orders', order.id), { status: 'gotowe' })
 }
 
-const toggleOrderForm = () => {
-  showForm.value = !showForm.value
-  if (!showForm.value) {
-    // Zeruj zamówienie przy zamknięciu formularza
-    orderDraft.items = {}
-    selectedOrderType.value = null
-    containerCount.value = 0
-  }
-}
-
-const increaseContainers = () => {
-  containerCount.value++
-}
-
-const decreaseContainers = () => {
-  if (containerCount.value > 0) {
-    containerCount.value--
-  }
-}
+// ==================== Auth ====================
 const logout = async () => {
   await signOut(auth)
   router.replace('/login')
-}
-
-const formatTime = (ts) => {
-  if (!ts?.seconds) return ''
-  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 </script>
 

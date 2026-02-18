@@ -81,25 +81,24 @@ const summary = ref({})
 
 let unsub = null
 
+// ==================== Lifecycle ====================
 onMounted(() => {
-  // nasłuchujemy tylko zamówień w toku
   const q = query(
-      collection(db, 'orders'),
-      where('status', '==', 'w_toku')
+    collection(db, 'orders'),
+    where('status', '==', 'w_toku')
   )
 
   unsub = onSnapshot(q, (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     orders.value = all
 
-    // podsumowanie: zliczamy ilości pozycji
-    const counts = {}
-    all.forEach((o) =>
-        (o.items || []).forEach((i) => {
-          counts[i.name] = (counts[i.name] || 0) + (i.quantity || 0)
-        })
-    )
-    summary.value = counts
+    // Zliczanie ilości pozycji
+    summary.value = all.reduce((acc, order) => {
+      (order.items || []).forEach(item => {
+        acc[item.name] = (acc[item.name] || 0) + (item.quantity || 0)
+      })
+      return acc
+    }, {})
   })
 })
 
@@ -107,20 +106,21 @@ onUnmounted(() => {
   if (unsub) unsub()
 })
 
-// kolor paska na górze w zależności od typu zamówienia
-const orderTypeClass = (order) => {
-  const type = (order.place || order.type || '').toLowerCase()
-
-  if (type.includes('miejs')) return 'k-type-namiejscu'     // "na miejscu"
-  if (type.includes('wynos')) return 'k-type-nawynos'      // "na wynos"
-  if (type.includes('dostaw')) return 'k-type-dostawa'     // "dostawa"
-
-  return 'order-top-default'
-}
-
+// ==================== Auth ====================
 const logout = async () => {
   await signOut(auth)
   router.replace('/login')
+}
+
+// ==================== Helpers ====================
+const orderTypeClass = (order) => {
+  const type = (order.place || order.type || '').toLowerCase()
+
+  if (type.includes('miejs')) return 'k-type-namiejscu'
+  if (type.includes('wynos')) return 'k-type-nawynos'
+  if (type.includes('dostaw')) return 'k-type-dostawa'
+
+  return 'order-top-default'
 }
 
 const formatTime = (ts) => {

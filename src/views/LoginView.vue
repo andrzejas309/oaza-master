@@ -47,37 +47,44 @@ import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/firebase'
 import { getRoleForEmail } from '@/router'
 
+const router = useRouter()
+
+// ==================== Form State ====================
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
-const router = useRouter()
 
+// ==================== Auth ====================
 const onSubmit = async () => {
   error.value = ''
   loading.value = true
+
   try {
     const cred = await signInWithEmailAndPassword(auth, email.value, password.value)
     const user = cred.user
 
-    let role = null
-    try {
-      role = await getRoleForEmail(user.email)
-    } catch (roleError) {
+    const role = await getRoleForEmail(user.email).catch((roleError) => {
       console.error('Role fetch error:', roleError)
-      error.value = 'Brak dostępu do roli. Sprawdź reguły Firestore.'
-      return
+      throw new Error('Brak dostępu do roli. Sprawdź reguły Firestore.')
+    })
+
+    const roleRoutes = {
+      'obsluga': '/obsluga',
+      'kuchnia': '/kuchnia',
+      'admin': '/admin'
     }
 
-    if (role === 'obsluga') await router.replace('/obsluga')
-    else if (role === 'kuchnia') await router.replace('/kuchnia')
-    else if (role === 'admin') await router.replace('/admin')
-    else {
+    if (roleRoutes[role]) {
+      await router.replace(roleRoutes[role])
+    } else {
       error.value = 'Brak przypisanej roli do tego konta.'
     }
   } catch (e) {
     console.error(e)
-    error.value = 'Niepoprawny login lub hasło.'
+    error.value = e.message === 'Brak dostępu do roli. Sprawdź reguły Firestore.'
+      ? e.message
+      : 'Niepoprawny login lub hasło.'
   } finally {
     loading.value = false
   }
