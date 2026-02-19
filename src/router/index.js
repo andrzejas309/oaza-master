@@ -8,6 +8,7 @@ const LoginView = () => import('../views/LoginView.vue')
 const ObslugaView = () => import('../views/ObslugaView.vue')
 const KuchniaView = () => import('../views/KuchniaView.vue')
 const AdminView = () => import('../views/AdminView.vue')
+const MenuManagementView = () => import('../views/MenuManagementView.vue')
 // const DevSeedView = () => import('../views/DevSeedView.vue')
 
 // Rola użytkownika jest pobierana z Firestore: kolekcja `role`, dokument o id = email
@@ -24,6 +25,7 @@ const routes = [
     { path: '/obsluga', name: 'obsluga', component: ObslugaView, meta: { role: 'obsluga' } },
     { path: '/kuchnia', name: 'kuchnia', component: KuchniaView, meta: { role: 'kuchnia' } },
     { path: '/admin', name: 'admin', component: AdminView, meta: { role: 'admin' } },
+    { path: '/menu-management', name: 'menu-management', component: MenuManagementView, meta: { role: 'admin' } },
     { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 

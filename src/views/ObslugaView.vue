@@ -91,14 +91,14 @@
               <div class="order-item-actions">
                 <button
                     class="icon-btn add"
-                    @click="increaseOrderItemCount(item.name)"
+                    @click="increaseOrderItemCount(item.name, item.quantity, item.extras)"
                     title="Dodaj jeszcze jedną pozycję"
                 >
                   +
                 </button>
                 <button
                     class="icon-btn subtract"
-                    @click="decreaseOrderItemCount(item.name)"
+                    @click="decreaseOrderItemCount(item.name, item.quantity, item.extras)"
                     title="Usuń jedną pozycję"
                     :disabled="item.count <= 1"
                 >
@@ -114,7 +114,7 @@
                 </button>
                 <button
                     class="icon-btn delete"
-                    @click="removeItem(item)"
+                    @click="removeItemByKey(item.key)"
                     title="Usuń pozycję"
                 >
                   ✖
@@ -354,10 +354,14 @@ import {
   doc,
   serverTimestamp,
 } from 'firebase/firestore'
-import menuJson from '../data/menu.json'
 import { useRouter } from 'vue-router'
+import { useMenu } from '@/composables/useMenu'
 
 const router = useRouter()
+
+// ==================== Menu from Firestore ====================
+const { menuItems, fetchMenu } = useMenu()
+const menu = computed(() => menuItems.value)
 
 // ==================== Constants ====================
 const MAX_ORDERS_DISPLAY = 8
@@ -418,9 +422,8 @@ const portionExcluded = [
   'żurek z kiełbaską',
 ]
 
-const categoryList = ['zupy', 'dania główne', 'dodatki', 'surówki', 'napoje', 'składniki']
+const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki', 'surówki', 'napoje', 'składniki']
 
-const menu = menuJson
 
 // ==================== State ====================
 const showForm = ref(false)
@@ -437,6 +440,7 @@ const portionDialogItem = ref(null)
 const PORTIONS = ref(PORTIONS_FULL)
 const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
+const extrasDialogItemKey = ref(null) // Klucz edytowanej pozycji
 const extrasSelected = ref([])
 const extrasOptions = ref(EXTRAS)
 
@@ -449,6 +453,7 @@ let unsub = null
 
 // ==================== Lifecycle ====================
 onMounted(() => {
+  fetchMenu() // Załaduj menu z Firestore
   unsub = onSnapshot(collection(db, 'orders'), (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     activeOrders.value = all.filter((o) => o.status === 'w_toku')
@@ -459,7 +464,7 @@ onUnmounted(() => unsub && unsub())
 
 // ==================== Computed - Containers ====================
 const containerPrice = computed(() => {
-  const container = menu.find((m) => m.name === 'pojemniki')
+  const container = menu.value.find((m) => m.name === 'pojemniki')
   return container ? container.price : 0
 })
 
@@ -469,7 +474,7 @@ const containersPrice = computed(() => containerCount.value * containerPrice.val
 const filteredMenu = computed(() => {
   const grouped = {}
 
-  for (const item of menu) {
+  for (const item of menu.value) {
     if (!grouped[item.category]) grouped[item.category] = []
     grouped[item.category].push(item)
   }
@@ -487,8 +492,10 @@ const filteredMenu = computed(() => {
 const orderItems = computed(() =>
   Object.entries(orderDraft.items)
     .filter(([, data]) => data.quantity > 0)
-    .map(([name, data]) => {
-      const found = menu.find((m) => m.name === name)
+    .map(([key, data]) => {
+      // data.name zawiera prawdziwą nazwę pozycji
+      const itemName = data.name
+      const found = menu.value.find((m) => m.name === itemName)
       const basePrice = found?.price || 0
 
       const extrasPrice = (data.extras || []).reduce(
@@ -501,7 +508,8 @@ const orderItems = computed(() =>
       const finalPrice = unitPrice * data.quantity * itemCount
 
       return {
-        name,
+        key: key,  // Unikalny klucz do identyfikacji
+        name: itemName,  // Prawdziwa nazwa
         quantity: data.quantity,
         count: itemCount,
         extras: data.extras || [],
@@ -537,21 +545,41 @@ const toGoQueueCount = computed(() => {
 })
 
 // ==================== Helper Functions ====================
-const ensureEntry = (name) => {
-  if (!orderDraft.items[name]) {
-    orderDraft.items[name] = {
-      quantity: 0,
+// Generuje unikalny klucz dla pozycji (name + quantity + extras)
+const generateItemKey = (name, quantity = 1, extras = []) => {
+  let key = name
+
+  // Dodaj quantity do klucza (różne porcje = różne pozycje)
+  if (quantity !== 1) {
+    key += `|q${quantity}`
+  }
+
+  // Dodaj extras do klucza
+  if (extras && extras.length > 0) {
+    const sortedExtras = [...extras].sort().join(',')
+    key += `|${sortedExtras}`
+  }
+
+  return key
+}
+
+const ensureEntry = (name, quantity = 1, extras = []) => {
+  const key = generateItemKey(name, quantity, extras)
+  if (!orderDraft.items[key]) {
+    orderDraft.items[key] = {
+      name: name,
+      quantity: quantity,
       count: 1,
-      extras: [],
+      extras: [...extras],
     }
   }
-  return orderDraft.items[name]
+  return orderDraft.items[key]
 }
 
 const canEditItem = (orderItem) => {
-  const base = menu.find((m) => m.name === orderItem.name)
+  const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return false
-  return ['zupy', 'dania główne', 'dodatki'].includes(base.category)
+  return ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki'].includes(base.category)
 }
 
 const formatPortionLabel = (val, itemName) => {
@@ -582,11 +610,16 @@ const formatTime = (ts) => {
 
 // ==================== Order Item Management ====================
 const removeItem = (item) => {
-  delete orderDraft.items[item.name]
+  const key = generateItemKey(item.name, item.quantity, item.extras)
+  delete orderDraft.items[key]
+}
+
+const removeItemByKey = (key) => {
+  delete orderDraft.items[key]
 }
 
 const increase = (item) => {
-  // Specjalna obsługa dla wątróbki - popup gramatury
+  // Specjalna obsługa dla golonki - popup gramatury
   if (item.name === 'golonka') {
     gramDialogItem.value = item
     gramValue.value = ''
@@ -594,14 +627,20 @@ const increase = (item) => {
     return
   }
 
-  const portionCategories = ['zupy', 'dodatki', 'surówki']
+  const portionCategories = ['zupy', 'zupa dnia', 'dodatki', 'surówki']
 
+  // Pozycje bez wyboru porcji - standardowa porcja (quantity=1)
   if (portionExcluded.includes(item.name)) {
-    const entry = ensureEntry(item.name)
-    entry.quantity += 1
+    const key = generateItemKey(item.name, 1, [])
+    if (orderDraft.items[key]) {
+      orderDraft.items[key].count += 1
+    } else {
+      ensureEntry(item.name, 1, [])
+    }
     return
   }
 
+  // Pozycje z wyborem porcji - pokazuj dialog
   if (portionCategories.includes(item.category)) {
     PORTIONS.value = ['dodatki', 'surówki'].includes(item.category)
       ? PORTIONS_HALF
@@ -612,19 +651,26 @@ const increase = (item) => {
     return
   }
 
-  const entry = ensureEntry(item.name)
-  entry.quantity += 1
+  // Pozostałe pozycje (dania główne) - standardowa porcja (quantity=1)
+  const key = generateItemKey(item.name, 1, [])
+  if (orderDraft.items[key]) {
+    orderDraft.items[key].count += 1
+  } else {
+    ensureEntry(item.name, 1, [])
+  }
 }
 
-const increaseOrderItemCount = (itemName) => {
-  const entry = orderDraft.items[itemName]
+const increaseOrderItemCount = (itemName, itemQuantity, itemExtras = []) => {
+  const key = generateItemKey(itemName, itemQuantity, itemExtras)
+  const entry = orderDraft.items[key]
   if (entry) {
     entry.count = (entry.count || 1) + 1
   }
 }
 
-const decreaseOrderItemCount = (itemName) => {
-  const entry = orderDraft.items[itemName]
+const decreaseOrderItemCount = (itemName, itemQuantity, itemExtras = []) => {
+  const key = generateItemKey(itemName, itemQuantity, itemExtras)
+  const entry = orderDraft.items[key]
   if (entry && entry.count > 1) {
     entry.count -= 1
   }
@@ -635,8 +681,16 @@ const choosePortion = (value) => {
   const item = portionDialogItem.value
   if (!item) return
 
-  const entry = ensureEntry(item.name)
-  entry.quantity += value
+  // Każdy rozmiar porcji to osobna pozycja
+  const key = generateItemKey(item.name, value, [])
+
+  if (orderDraft.items[key]) {
+    // Ta sama porcja już istnieje - zwiększ count
+    orderDraft.items[key].count += 1
+  } else {
+    // Nowy rozmiar porcji - utwórz nową pozycję
+    ensureEntry(item.name, value, [])
+  }
 
   portionDialogOpen.value = false
   portionDialogItem.value = null
@@ -654,8 +708,16 @@ const confirmGramAmount = () => {
   }
 
   // Cena za 100g, więc quantity = grams / 100
-  const entry = ensureEntry(item.name)
-  entry.quantity += grams / 100
+  const quantity = grams / 100
+  const key = generateItemKey(item.name, quantity, [])
+
+  if (orderDraft.items[key]) {
+    // Ta sama gramatura już istnieje - zwiększ count
+    orderDraft.items[key].count += 1
+  } else {
+    // Nowa gramatura - utwórz nową pozycję
+    ensureEntry(item.name, quantity, [])
+  }
 
   gramDialogOpen.value = false
   gramDialogItem.value = null
@@ -664,12 +726,14 @@ const confirmGramAmount = () => {
 
 // ==================== Extras Dialog ====================
 const startEditItem = (orderItem) => {
-  const base = menu.find((m) => m.name === orderItem.name)
+  const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return
 
   const categoryExtras = {
     'dania główne': EXTRAS_FOR_MAIN,
+    'danie dnia': EXTRAS_FOR_MAIN,
     'zupy': EXTRAS_FOR_SOUPS,
+    'zupa dnia': EXTRAS_FOR_SOUPS,
     'dodatki': EXTRAS_FOR_SIDES
   }
 
@@ -678,8 +742,10 @@ const startEditItem = (orderItem) => {
 
   extrasOptions.value = extras
   extrasDialogItem.value = base
-  const current = orderDraft.items[orderItem.name]
-  extrasSelected.value = current?.extras ? [...current.extras] : []
+
+  // Zapisz oryginalny klucz (z quantity) i extras
+  extrasDialogItemKey.value = generateItemKey(orderItem.name, orderItem.quantity, orderItem.extras)
+  extrasSelected.value = orderItem.extras ? [...orderItem.extras] : []
 
   extrasDialogOpen.value = true
 }
@@ -699,11 +765,33 @@ const saveExtras = () => {
   const item = extrasDialogItem.value
   if (!item) return
 
-  const entry = ensureEntry(item.name)
-  entry.extras = [...extrasSelected.value]
+  const oldKey = extrasDialogItemKey.value
+  const oldEntry = orderDraft.items[oldKey]
+  if (!oldEntry) return
+
+  const newExtras = [...extrasSelected.value]
+  const newKey = generateItemKey(item.name, oldEntry.quantity, newExtras)
+
+  // Jeśli klucz się zmienił (inne extras), przenieś dane do nowej pozycji
+  if (oldKey !== newKey) {
+    // Utwórz nową pozycję z nowymi extras
+    orderDraft.items[newKey] = {
+      name: item.name,
+      quantity: oldEntry.quantity,
+      count: oldEntry.count,
+      extras: newExtras,
+    }
+
+    // Usuń starą pozycję
+    delete orderDraft.items[oldKey]
+  } else {
+    // Ten sam klucz - tylko aktualizuj extras (na wszelki wypadek)
+    oldEntry.extras = newExtras
+  }
 
   extrasDialogOpen.value = false
   extrasDialogItem.value = null
+  extrasDialogItemKey.value = null
 }
 
 // ==================== Container Management ====================

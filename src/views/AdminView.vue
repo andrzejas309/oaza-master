@@ -3,6 +3,7 @@
     <header class="flex flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <h1 style="font-size: 1.75rem; font-weight: 800;">Panel admina</h1>
       <div class="flex flex-row" style="gap: 0.5rem; align-items: center;">
+        <button class="btn-outline btn-sm" @click="router.push('/menu-management')">Zarządzaj Menu</button>
         <button class="btn-outline btn-sm" @click="router.push('/obsluga')">Obsługa</button>
         <button class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
         <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
@@ -10,6 +11,13 @@
     </header>
 
     <DateFilterBar @change="onFilterChange" />
+
+    <!-- Przycisk Historia zamówień -->
+    <section style="margin-bottom: 1rem;">
+      <button class="btn-history" @click="showHistoryDialog = true">
+        📋 Historia zamówień
+      </button>
+    </section>
 
     <!-- Podstawowe metryki -->
     <section class="flex flex-col md:flex-row gap-4" style="margin-bottom: 1rem;">
@@ -45,7 +53,7 @@
         <ul v-if="topItems.length > 0" class="flex flex-col gap-1">
           <li v-for="(item, index) in topItems" :key="item.name" class="flex flex-row" style="justify-content: space-between; gap: 0.75rem;">
             <span style="flex: 1;">{{ index + 1 }}. {{ item.name }}</span>
-            <strong style="min-width: 2.5rem; text-align: right;">{{ item.quantity }}</strong>
+            <strong style="min-width: 2.5rem; text-align: right;">{{ formatItemQuantity(item.quantity) }}</strong>
             <strong style="min-width: 5.5rem; text-align: right; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</strong>
           </li>
         </ul>
@@ -94,11 +102,73 @@
             <tbody>
               <tr v-for="(item, index) in allItems" :key="item.name">
                 <td style="padding: 0.75rem;">{{ index + 1 }}. {{ item.name }}</td>
-                <td style="text-align: right; padding: 0.75rem; font-weight: 600;">{{ item.quantity }}</td>
+                <td style="text-align: right; padding: 0.75rem; font-weight: 600;">{{ item.displayQuantity }}</td>
                 <td style="text-align: right; padding: 0.75rem; font-weight: 700; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Popup Historia zamówień -->
+    <div v-if="showHistoryDialog" class="dialog-backdrop" @click.self="showHistoryDialog = false">
+      <div class="dialog-content history-dialog">
+        <div class="dialog-header">
+          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Historia zamówień</h2>
+          <button class="dialog-close" @click="showHistoryDialog = false">✖</button>
+        </div>
+
+        <div class="dialog-body">
+          <div v-if="groupedOrders.length === 0" style="padding: 2rem; text-align: center; color: #6b7280;">
+            Brak zamówień w wybranym okresie
+          </div>
+          <div v-else>
+            <div v-for="group in groupedOrders" :key="group.period" class="history-group">
+              <div class="history-group-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0;">{{ group.period }}</h3>
+                <div style="display: flex; gap: 1.5rem; font-size: 0.9rem;">
+                  <span>Zamówienia: <strong>{{ group.count }}</strong></span>
+                  <span style="color: #e67700;">Suma: <strong>{{ group.total.toFixed(2) }} zł</strong></span>
+                </div>
+              </div>
+              <div class="history-orders">
+                <div v-for="order in group.orders" :key="order.id" class="history-order-item">
+                  <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                    <div>
+                      <strong style="font-size: 1rem;">#{{ order.number }}</strong>
+                      <span style="margin-left: 0.5rem; color: #6b7280; font-size: 0.875rem;">
+                        {{ formatOrderTime(order.createdAt) }}
+                      </span>
+                      <span
+                        style="margin-left: 0.5rem; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;"
+                        :style="{
+                          background: order.type === 'na_miejscu' ? '#dbeafe' : '#fef3c7',
+                          color: order.type === 'na_miejscu' ? '#1e40af' : '#92400e'
+                        }"
+                      >
+                        {{ order.type === 'na_miejscu' ? 'Na miejscu' : 'Na wynos' }}
+                      </span>
+                    </div>
+                    <strong style="color: #e67700; font-size: 1.1rem;">{{ calculateOrderTotal(order).toFixed(2) }} zł</strong>
+                  </div>
+                  <div style="font-size: 0.875rem; color: #6b7280;">
+                    <div v-for="item in order.items" :key="item.name" style="margin-bottom: 0.25rem;">
+                      • {{ item.name }}
+                      <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">
+                        {{ item.count }}×
+                      </span>
+                      <span v-if="item.quantity && item.quantity !== 1">({{ formatQuantity(item.quantity) }})</span>
+                      <span v-if="item.extras && item.extras.length"> + {{ item.extras.join(', ') }}</span>
+                    </div>
+                    <div v-if="order.containers > 0" style="margin-top: 0.25rem; font-style: italic;">
+                      Pojemniki: {{ order.containers }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -118,6 +188,8 @@ const router = useRouter()
 const orders = ref([])
 const filter = ref({ mode: 'day', date: null, month: null, year: null })
 const showAllItemsDialog = ref(false)
+const showHistoryDialog = ref(false)
+
 
 // ==================== Lifecycle ====================
 onMounted(() => {
@@ -200,14 +272,25 @@ const ordersToGo = computed(() =>
   filteredOrders.value.filter(order => order.type === 'na_wynos').length
 )
 
+// Helper function - oblicza sumę pojedynczego zamówienia
+const calculateOrderTotal = (order) => {
+  const total = (order.items || []).reduce((sum, item) => {
+    // finalPrice już zawiera unitPrice × quantity × count, więc używamy go bezpośrednio
+    // Jeśli brak finalPrice, obliczamy ręcznie (backward compatibility)
+    if (item.finalPrice != null) {
+      return sum + Number(item.finalPrice)
+    }
+    const price = Number(item.price ?? 0)
+    const qty = Number(item.quantity ?? 1)
+    const count = Number(item.count ?? 1)
+    return sum + (price * qty * count)
+  }, 0)
+  return roundTo2Decimals(total)
+}
+
 const totalRevenue = computed(() => {
   return filteredOrders.value.reduce((total, order) => {
-    const orderTotal = (order.items || []).reduce((sum, item) => {
-      const price = Number(item.finalPrice ?? item.price ?? 0)
-      const qty = Number(item.quantity ?? 1)
-      return sum + (price * qty)
-    }, 0)
-    return total + orderTotal
+    return total + calculateOrderTotal(order)
   }, 0)
 })
 
@@ -217,22 +300,55 @@ const totalContainers = computed(() => {
   }, 0)
 })
 
+// ==================== Utility Functions ====================
+const roundTo2Decimals = (value) => Math.round(value * 100) / 100
+
+const formatItemQuantity = (qty) => {
+  const rounded = roundTo2Decimals(qty)
+
+  // Sprawdź czy to liczba całkowita
+  if (Number.isInteger(rounded)) {
+    return rounded.toString()
+  }
+
+  // Dla ułamków dziesiętnych - wyświetl z maksymalnie 2 miejscami po przecinku
+  return rounded.toFixed(2).replace(/\.?0+$/, '')
+}
+
 // Helper function - oblicza statystyki wszystkich pozycji
 const calculateItemStats = () => {
-  return filteredOrders.value.reduce((acc, order) => {
+  const stats = filteredOrders.value.reduce((acc, order) => {
     (order.items || []).forEach(item => {
+      const count = Number(item.count ?? 1)
       const qty = Number(item.quantity ?? 1)
-      const price = Number(item.finalPrice ?? item.price ?? 0)
-      const revenue = price * qty
+      const totalQty = count * qty
+
+      // finalPrice już zawiera unitPrice × quantity × count
+      // Jeśli brak finalPrice, obliczamy ręcznie (backward compatibility)
+      let revenue
+      if (item.finalPrice != null) {
+        revenue = Number(item.finalPrice)
+      } else {
+        const price = Number(item.price ?? 0)
+        revenue = price * qty * count
+      }
 
       if (!acc[item.name]) {
         acc[item.name] = { quantity: 0, revenue: 0 }
       }
-      acc[item.name].quantity += qty
+      acc[item.name].quantity += totalQty
       acc[item.name].revenue += revenue
     })
     return acc
   }, {})
+
+  // Zaokrąglij wszystkie wartości na końcu (eliminuje błędy zmiennoprzecinkowe)
+  Object.keys(stats).forEach(key => {
+    stats[key].quantity = roundTo2Decimals(stats[key].quantity)
+    stats[key].revenue = roundTo2Decimals(stats[key].revenue)
+  })
+
+  return stats
 }
 
 const topItems = computed(() => {
@@ -248,7 +364,11 @@ const allItems = computed(() => {
   const itemStats = calculateItemStats()
 
   return Object.entries(itemStats)
-    .map(([name, stats]) => ({ name, ...stats }))
+    .map(([name, stats]) => ({
+      name,
+      ...stats,
+      displayQuantity: formatItemQuantity(stats.quantity)
+    }))
     .sort((a, b) => b.quantity - a.quantity)
 })
 
@@ -287,6 +407,84 @@ const chartOptions = {
     }
   }
 }
+
+// ==================== Historia zamówień ====================
+const groupedOrders = computed(() => {
+  if (!filteredOrders.value.length) return []
+
+  const grouped = {}
+
+  // Synchronizuj historyGroupBy z aktualnym filtrem
+  const groupMode = filter.value.mode === 'month' || filter.value.mode === 'year' ? 'month' : 'day'
+
+  filteredOrders.value.forEach(order => {
+    let key
+    const date = order.createdAt
+
+    if (groupMode === 'day') {
+      // Format: DD.MM.YYYY
+      key = date.toLocaleDateString('pl-PL', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    } else {
+      // Format: Miesiąc YYYY
+      key = date.toLocaleDateString('pl-PL', {
+        year: 'numeric',
+        month: 'long'
+      })
+    }
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        period: key,
+        orders: [],
+        count: 0,
+        total: 0
+      }
+    }
+
+    grouped[key].orders.push(order)
+    grouped[key].count++
+    grouped[key].total += calculateOrderTotal(order)
+  })
+
+  // Sortowanie malejąco (najnowsze najpierw)
+  return Object.values(grouped).sort((a, b) => {
+    const dateA = a.orders[0].createdAt
+    const dateB = b.orders[0].createdAt
+    return dateB - dateA
+  })
+})
+
+
+const formatOrderTime = (date) => {
+  if (!date) return ''
+  return date.toLocaleString('pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const formatQuantity = (qty) => {
+  if (qty === 0.5) return '½ porcji'
+  if (qty === 1) return '1 porcja'
+  if (qty === 1.5) return '1½ porcji'
+  if (qty === 2) return '2 porcje'
+  if (qty % 1 === 0) return `${qty} porcji`
+
+  // Dla golonki (gramatury)
+  const grams = Math.round(qty * 100)
+  if (grams >= 100) return `${grams}g`
+
+  return qty.toString()
+}
+
+
 </script>
 
 
@@ -312,6 +510,31 @@ const chartOptions = {
   }
 }
 
+/* Przycisk Historia zamówień */
+.btn-history {
+  width: 100%;
+  background: linear-gradient(135deg, #ff8a3c 0%, #e67700 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border: none;
+  border-radius: 1rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(230, 119, 0, 0.3);
+}
+
+.btn-history:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(230, 119, 0, 0.4);
+}
+
+.btn-history:active {
+  transform: translateY(0);
+}
+
+
 /* Styl przycisków jak w panelu obsługi */
 .btn-outline {
   background: white;
@@ -331,6 +554,7 @@ const chartOptions = {
   font-size: 0.9rem;
   padding: 0.4rem 0.8rem;
 }
+
 
 /* Dialog / Popup */
 .dialog-backdrop {
@@ -353,6 +577,10 @@ const chartOptions = {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+}
+
+.history-dialog {
+  max-width: 1000px;
 }
 
 .dialog-header {
@@ -383,6 +611,48 @@ const chartOptions = {
   flex: 1;
 }
 
+/* Historia zamówień */
+.history-group {
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.history-group:last-child {
+  border-bottom: none;
+}
+
+.history-group-header {
+  background: #f9fafb;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.history-orders {
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.history-order-item {
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.history-order-item:hover {
+  background: #ffe8d5;
+  border-color: #ff8a3c;
+}
+
+/* Tabela pozycji */
 .items-table {
   width: 100%;
   border-collapse: collapse;
@@ -427,6 +697,17 @@ const chartOptions = {
   .items-table td {
     padding: 0.5rem !important;
     font-size: 0.875rem;
+  }
+
+  .history-group-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .btn-history {
+    font-size: 1rem;
+    padding: 0.875rem 1.25rem;
   }
 }
 </style>
