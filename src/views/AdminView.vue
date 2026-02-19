@@ -15,14 +15,24 @@
     <section class="flex flex-col md:flex-row gap-4" style="margin-bottom: 1rem;">
       <div class="card" style="flex: 1;">
         <h2 style="font-size: 1.25rem; font-weight: 600;">Liczba zamówień</h2>
+        <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.9rem;">
+          <div>
+            <span style="color: #6b7280;">Na miejscu:</span>
+            <strong style="margin-left: 0.25rem;">{{ ordersOnSite }}</strong>
+          </div>
+          <div>
+            <span style="color: #6b7280;">Na wynos:</span>
+            <strong style="margin-left: 0.25rem;">{{ ordersToGo }}</strong>
+          </div>
+        </div>
         <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
           {{ totalOrders }}
         </p>
-        <h2 style="font-size: 1.25rem; font-weight: 600;">Suma zamówień</h2>
+        <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 1rem;">Suma zamówień</h2>
         <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
           {{ totalRevenue.toFixed(2) }} zł
         </p>
-        <h2 style="font-size: 1.25rem; font-weight: 600;">Wydane pojemniki</h2>
+        <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 1rem;">Wydane pojemniki</h2>
         <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
           {{ totalContainers }}
         </p>
@@ -35,13 +45,21 @@
         <ul v-if="topItems.length > 0" class="flex flex-col gap-1">
           <li v-for="(item, index) in topItems" :key="item.name" class="flex flex-row" style="justify-content: space-between; gap: 0.75rem;">
             <span style="flex: 1;">{{ index + 1 }}. {{ item.name }}</span>
-            <strong style="min-width: 2.5rem; text-align: right;">x {{ item.quantity }} =</strong>
-            <strong style="min-width: 5.5rem; text-align: right;">{{ item.revenue.toFixed(2) }} zł</strong>
+            <strong style="min-width: 2.5rem; text-align: right;">{{ item.quantity }}</strong>
+            <strong style="min-width: 5.5rem; text-align: right; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</strong>
           </li>
         </ul>
         <p v-else style="font-size: 0.9rem; color: #6b7280;">
           Brak zamówień w wybranym okresie.
         </p>
+        <button
+          v-if="topItems.length > 0"
+          class="btn-outline btn-sm"
+          @click="showAllItemsDialog = true"
+          style="margin-top: 0.75rem; width: 25%;"
+        >
+          Więcej
+        </button>
       </div>
     </section>
 
@@ -55,6 +73,35 @@
       </div>
       <p v-else style="font-size: 0.9rem; color: #6b7280;">Brak danych do wyświetlenia.</p>
     </section>
+
+    <!-- Popup z wszystkimi pozycjami -->
+    <div v-if="showAllItemsDialog" class="dialog-backdrop" @click.self="showAllItemsDialog = false">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Wszystkie pozycje</h2>
+          <button class="dialog-close" @click="showAllItemsDialog = false">✖</button>
+        </div>
+
+        <div class="dialog-body">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 0.75rem;">Pozycja</th>
+                <th style="text-align: right; padding: 0.75rem;">Ilość</th>
+                <th style="text-align: right; padding: 0.75rem;">Suma</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in allItems" :key="item.name">
+                <td style="padding: 0.75rem;">{{ index + 1 }}. {{ item.name }}</td>
+                <td style="text-align: right; padding: 0.75rem; font-weight: 600;">{{ item.quantity }}</td>
+                <td style="text-align: right; padding: 0.75rem; font-weight: 700; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -70,6 +117,7 @@ import { Bar } from 'vue-chartjs'
 const router = useRouter()
 const orders = ref([])
 const filter = ref({ mode: 'day', date: null, month: null, year: null })
+const showAllItemsDialog = ref(false)
 
 // ==================== Lifecycle ====================
 onMounted(() => {
@@ -85,7 +133,7 @@ const logout = async () => {
 // ==================== Data Fetching ====================
 const onFilterChange = (f) => {
   filter.value = f
-  fetchData()
+  // Filtrowanie odbywa się automatycznie przez computed property filteredOrders
 }
 
 const fetchData = async () => {
@@ -106,11 +154,54 @@ const fetchData = async () => {
   })
 }
 
+// ==================== Computed - Filtering ====================
+const getDateRange = () => {
+  const mode = filter.value.mode
+  let start, end
+
+  if (mode === 'day' && filter.value.date) {
+    start = new Date(filter.value.date + 'T00:00:00')
+    end = new Date(filter.value.date + 'T23:59:59')
+  } else if (mode === 'month' && filter.value.month) {
+    const [y, m] = filter.value.month.split('-').map(Number)
+    start = new Date(y, m - 1, 1, 0, 0, 0)
+    end = new Date(y, m, 0, 23, 59, 59)
+  } else if (mode === 'year' && filter.value.year) {
+    const y = filter.value.year
+    start = new Date(y, 0, 1, 0, 0, 0)
+    end = new Date(y, 11, 31, 23, 59, 59)
+  } else {
+    // Domyślnie: dzisiejszy dzień
+    const now = new Date()
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  }
+
+  return { start, end }
+}
+
+const filteredOrders = computed(() => {
+  const { start, end } = getDateRange()
+
+  return orders.value.filter(order => {
+    const orderDate = order.createdAt
+    return orderDate >= start && orderDate <= end
+  })
+})
+
 // ==================== Computed Metrics ====================
-const totalOrders = computed(() => orders.value.length)
+const totalOrders = computed(() => filteredOrders.value.length)
+
+const ordersOnSite = computed(() =>
+  filteredOrders.value.filter(order => order.type === 'na_miejscu').length
+)
+
+const ordersToGo = computed(() =>
+  filteredOrders.value.filter(order => order.type === 'na_wynos').length
+)
 
 const totalRevenue = computed(() => {
-  return orders.value.reduce((total, order) => {
+  return filteredOrders.value.reduce((total, order) => {
     const orderTotal = (order.items || []).reduce((sum, item) => {
       const price = Number(item.finalPrice ?? item.price ?? 0)
       const qty = Number(item.quantity ?? 1)
@@ -121,13 +212,14 @@ const totalRevenue = computed(() => {
 })
 
 const totalContainers = computed(() => {
-  return orders.value.reduce((total, order) => {
+  return filteredOrders.value.reduce((total, order) => {
     return total + Number(order.containers ?? 0)
   }, 0)
 })
 
-const topItems = computed(() => {
-  const itemStats = orders.value.reduce((acc, order) => {
+// Helper function - oblicza statystyki wszystkich pozycji
+const calculateItemStats = () => {
+  return filteredOrders.value.reduce((acc, order) => {
     (order.items || []).forEach(item => {
       const qty = Number(item.quantity ?? 1)
       const price = Number(item.finalPrice ?? item.price ?? 0)
@@ -141,6 +233,10 @@ const topItems = computed(() => {
     })
     return acc
   }, {})
+}
+
+const topItems = computed(() => {
+  const itemStats = calculateItemStats()
 
   return Object.entries(itemStats)
     .map(([name, stats]) => ({ name, ...stats }))
@@ -148,12 +244,20 @@ const topItems = computed(() => {
     .slice(0, 10)
 })
 
+const allItems = computed(() => {
+  const itemStats = calculateItemStats()
+
+  return Object.entries(itemStats)
+    .map(([name, stats]) => ({ name, ...stats }))
+    .sort((a, b) => b.quantity - a.quantity)
+})
+
 // ==================== Chart Configuration ====================
 const chartData = computed(() => {
-  if (!orders.value.length) return null
+  if (!filteredOrders.value.length) return null
 
   const counts = Array(24).fill(0)
-  orders.value.forEach(order => {
+  filteredOrders.value.forEach(order => {
     const hour = order.createdAt.getHours()
     counts[hour]++
   })
@@ -226,5 +330,103 @@ const chartOptions = {
 .btn-sm {
   font-size: 0.9rem;
   padding: 0.4rem 0.8rem;
+}
+
+/* Dialog / Popup */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.dialog-content {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0.5rem;
+  transition: color 0.2s ease;
+}
+
+.dialog-close:hover {
+  color: #e67700;
+}
+
+.dialog-body {
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.items-table thead {
+  background: #f9fafb;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.items-table th {
+  font-weight: 700;
+  color: #374151;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.items-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+  transition: background-color 0.15s ease;
+}
+
+.items-table tbody tr:hover {
+  background-color: #ffe8d5;
+}
+
+.items-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 768px) {
+  .dialog-content {
+    max-width: 95vw;
+    max-height: 85vh;
+  }
+
+  .items-table th,
+  .items-table td {
+    padding: 0.5rem !important;
+    font-size: 0.875rem;
+  }
 }
 </style>

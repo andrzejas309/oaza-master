@@ -12,7 +12,7 @@
 
     <!-- AKCJE -->
     <div class="actions-bar">
-      <button class="btn-sage" @click="toggleOrderForm">
+      <button class="btn-sage btn-large" @click="toggleOrderForm">
         {{ showForm ? '✖ Anuluj' : '+ Dodaj zamówienie' }}
       </button>
     </div>
@@ -72,7 +72,7 @@
               <div>
                 {{ item.name }}
                 <span class="muted">
-                  ({{ formatPortionLabel(item.quantity) }})
+                  ({{ formatPortionLabel(item.quantity, item.name) }})
                 </span>
                 <span v-if="item.count > 1" class="count-badge">x{{ item.count }}</span>
               </div>
@@ -145,7 +145,7 @@
 
         <div class="order-actions">
           <button
-              class="btn-sage"
+              class="btn-sage btn-large"
               @click="saveOrder"
               :disabled="!orderItems.length || saving || !selectedOrderType"
           >
@@ -183,7 +183,7 @@
                 <div>
                   {{ item.name }}
                   <span class="muted">
-                    ({{ formatPortionLabel(item.quantity ?? 1) }})
+                    ({{ formatPortionLabel(item.quantity ?? 1, item.name) }})
                   </span>
                 </div>
                 <div
@@ -241,7 +241,7 @@
                 <div>
                   {{ item.name }}
                   <span class="muted">
-                    ({{ formatPortionLabel(item.quantity ?? 1) }})
+                    ({{ formatPortionLabel(item.quantity ?? 1, item.name) }})
                   </span>
                 </div>
                 <div
@@ -308,6 +308,35 @@
             {{ extra.name }} (+{{ extra.price }} zł)
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- POPUP GRAMATURY DLA GOLONKI -->
+    <div v-if="gramDialogOpen" class="portion-dialog-backdrop" @click.self="gramDialogOpen = false">
+      <div class="portion-dialog">
+        <h3>Golonka</h3>
+        <p class="muted">Cena: 7 zł za 100g</p>
+
+        <div class="gram-input-container">
+          <label for="gram-input">Podaj gramaaturę (w gramach):</label>
+          <input
+              id="gram-input"
+              type="number"
+              v-model="gramValue"
+              placeholder="np. 300"
+              min="1"
+              step="1"
+              class="gram-input"
+              @keyup.enter="confirmGramAmount"
+          />
+        </div>
+
+        <button
+            class="btn-sage btn-large"
+            @click="confirmGramAmount"
+        >
+          Zatwierdź
+        </button>
       </div>
     </div>
   </div>
@@ -410,6 +439,11 @@ const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
 const extrasSelected = ref([])
 const extrasOptions = ref(EXTRAS)
+
+// Dialog gramatury dla wątróbki
+const gramDialogOpen = ref(false)
+const gramDialogItem = ref(null)
+const gramValue = ref('')
 
 let unsub = null
 
@@ -520,8 +554,15 @@ const canEditItem = (orderItem) => {
   return ['zupy', 'dania główne', 'dodatki'].includes(base.category)
 }
 
-const formatPortionLabel = (val) => {
+const formatPortionLabel = (val, itemName) => {
   if (val == null) return '1 porcja'
+
+  // Specjalne formatowanie dla golonki (gramatura)
+  if (itemName === 'golonka') {
+    const grams = Math.round(val * 100)
+    return `${grams}g`
+  }
+
   const labels = {
     1: 'cała porcja',
     0.5: '½ porcji',
@@ -545,6 +586,14 @@ const removeItem = (item) => {
 }
 
 const increase = (item) => {
+  // Specjalna obsługa dla wątróbki - popup gramatury
+  if (item.name === 'golonka') {
+    gramDialogItem.value = item
+    gramValue.value = ''
+    gramDialogOpen.value = true
+    return
+  }
+
   const portionCategories = ['zupy', 'dodatki', 'surówki']
 
   if (portionExcluded.includes(item.name)) {
@@ -591,6 +640,26 @@ const choosePortion = (value) => {
 
   portionDialogOpen.value = false
   portionDialogItem.value = null
+}
+
+// ==================== Gram Dialog (dla wątróbki) ====================
+const confirmGramAmount = () => {
+  const item = gramDialogItem.value
+  if (!item) return
+
+  const grams = parseInt(gramValue.value)
+  if (!grams || grams <= 0) {
+    alert('Proszę podać prawidłową gramaaturę')
+    return
+  }
+
+  // Cena za 100g, więc quantity = grams / 100
+  const entry = ensureEntry(item.name)
+  entry.quantity += grams / 100
+
+  gramDialogOpen.value = false
+  gramDialogItem.value = null
+  gramValue.value = ''
 }
 
 // ==================== Extras Dialog ====================
@@ -775,6 +844,18 @@ button {
   transform: translateY(-1px);
 }
 
+/* Większe przyciski dla głównych akcji */
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  min-height: 50px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.btn-large:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
 /* Przyciski typu outline – zielono/pomarańczowe obramowanie */
 .btn-outline {
   background: white;
@@ -824,18 +905,25 @@ button {
 .order-type-pill {
   border-radius: 9999px;
   background: #e5e7eb;
-  padding: 1rem 2.5rem;
+  padding: 1.2rem 3rem;
   font-weight: 600;
   border: none;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.order-type-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .order-type-pill.active {
   background: #8fbc8f;
   color: black;
-  box-shadow: 0 0 0 2px var(--green-soft);
+  box-shadow: 0 0 0 3px var(--green-soft);
+  transform: scale(1.05);
 }
 
 /* SEKCJA FORMULARZA ZAMÓWIENIA */
@@ -868,16 +956,22 @@ button {
 .letter-pill {
   border-radius: 9999px;
   background: #e5e7eb;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   font-weight: 600;
   border: none;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  min-height: 40px;
+  transition: all 0.2s ease;
 }
 .letter-pill.active {
   background: #8fbc8f;
   color: black;
   box-shadow: 0 0 0 2px var(--green-soft);
+}
+.letter-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .menu-list {
@@ -888,12 +982,15 @@ button {
 .menu-item-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.6rem 0.8rem;
+  padding: 0.8rem 1rem;
   background: #f9fafb;
   border-radius: 0.75rem;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
   border: 1px solid #e5e7eb;
+  min-height: 48px;
+  align-items: center;
+  font-size: 1rem;
 }
 .menu-item-row:hover {
   background: var(--green-soft);
@@ -942,14 +1039,39 @@ button {
 
 .order-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: stretch;
+  position: sticky;
+  bottom: 0;
+  background: white;
+  margin: 0 -1.25rem -1.25rem;
+  padding: 1rem 1.25rem;
+  border-top: 2px solid var(--border-subtle);
+}
+
+.order-actions button {
+  width: 100%;
 }
 
 /* Stan disabled dla zapisu */
 button[disabled] {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Pulsowanie dla przycisku zapisu gdy jest aktywny */
+.btn-sage.btn-large:not([disabled]) {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+  50% {
+    box-shadow: 0 2px 20px rgba(47, 158, 68, 0.4);
+  }
 }
 
 /* LISTA ZAMÓWIEŃ (W TOKU) */
@@ -1052,9 +1174,9 @@ button[disabled] {
 
 .portion-dialog {
   background: white;
-  padding: 1.5rem;
+  padding: 2rem;
   border-radius: var(--radius);
-  width: 300px;
+  width: 350px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -1065,12 +1187,19 @@ button[disabled] {
 .portion-buttons {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.8rem;
+}
+
+.portion-buttons .btn-sage {
+  font-size: 1.1rem;
+  padding: 1rem 1.5rem;
+  min-height: 50px;
 }
 
 .portion-buttons .btn-sage.active {
-  outline: 2px solid #2f9e44;
-  box-shadow: 0 0 0 2px #d3f9d8;
+  outline: 3px solid #2f9e44;
+  box-shadow: 0 0 0 4px #d3f9d8;
+  transform: scale(1.02);
 }
 
 .order-item-right {
@@ -1085,8 +1214,10 @@ button[disabled] {
 }
 
 .order-item-actions button {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 0.8rem;
   font-size: 1.1rem;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .icon-btn {
@@ -1094,8 +1225,13 @@ button[disabled] {
   background: transparent;
   cursor: pointer;
   font-size: 0.95rem;
-  padding: 0.24rem 0.44rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 999px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-btn.add {
@@ -1103,8 +1239,10 @@ button[disabled] {
   background: #d3f9d8;
   color: #2f9e44;
   font-weight: 700;
-  font-size: 1.05rem;
-  padding: 0.38rem 0.56rem;
+  font-size: 1.15rem;
+  padding: 0.5rem 0.7rem;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .icon-btn.add:hover {
@@ -1117,8 +1255,10 @@ button[disabled] {
   background: #ffe3e3;
   color: #cc0000;
   font-weight: 700;
-  font-size: 1.05rem;
-  padding: 0.38rem 0.56rem;
+  font-size: 1.15rem;
+  padding: 0.5rem 0.7rem;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .icon-btn.subtract:hover:not([disabled]) {
@@ -1134,8 +1274,10 @@ button[disabled] {
 .icon-btn.edit {
   border: 1px solid #f59f00;
   background: #fff7e6;
-  font-size: 0.95rem;
-  padding: 0.24rem 0.44rem;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .icon-btn.edit:hover {
@@ -1145,8 +1287,10 @@ button[disabled] {
 .icon-btn.delete {
   border: 1px solid #e03131;
   background: #ffe3e3;
-  font-size: 0.95rem;
-  padding: 0.24rem 0.44rem;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .icon-btn.delete:hover {
@@ -1181,11 +1325,11 @@ button[disabled] {
   color: black;
   border: none;
   border-radius: 50%;
-  width: 2rem;
-  height: 2rem;
+  width: 2.5rem;
+  height: 2.5rem;
   cursor: pointer;
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
@@ -1198,10 +1342,57 @@ button[disabled] {
 }
 
 .counter-value {
-  min-width: 2rem;
+  min-width: 2.5rem;
   text-align: center;
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 1.1rem;
+}
+
+/* Popup gramatury */
+.gram-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.gram-input-container label {
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+}
+
+.gram-input {
+  padding: 1rem;
+  font-size: 1.2rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.75rem;
+  text-align: center;
+  font-weight: 600;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.gram-input:focus {
+  outline: none;
+  border-color: #8fbc8f;
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+
+.gram-input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Usuń strzałki z input type=number */
+.gram-input::-webkit-outer-spin-button,
+.gram-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.gram-input[type=number] {
+  -moz-appearance: textfield;
 }
 
 </style>
