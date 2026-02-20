@@ -1230,8 +1230,8 @@ button {
   position: sticky;
   bottom: 0;
   background: var(--green-soft);
-  margin: 0 -1.25rem -1.25rem;
-  padding: 1rem 1.25rem;
+  margin: 0 0 -1.25rem 0;
+  padding: 1rem 1rem;
   border-top: 2px solid #8fbc8f;
 }
 
@@ -1338,6 +1338,7 @@ button[disabled] {
   color: #3a9a52;
   font-size: 0.88em;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 /* RWD – węższe ekrany */
