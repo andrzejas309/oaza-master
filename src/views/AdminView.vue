@@ -1,109 +1,115 @@
 <template>
-  <div class="view-container">
-    <header class="flex flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h1 style="font-size: 1.75rem; font-weight: 800;">Panel admina</h1>
-      <div class="flex flex-row" style="gap: 0.5rem; align-items: center;">
-        <button class="btn-outline btn-sm" @click="router.push('/menu-management')">Zarządzaj Menu</button>
-        <button class="btn-outline btn-sm" @click="router.push('/obsluga')">Obsługa</button>
-        <button class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
-        <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+  <div class="admin-root">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="header-icon">🛡️</span>
+        <h1 class="header-title">Panel admina</h1>
       </div>
+      <nav class="header-nav">
+        <button class="btn-nav" @click="router.push('/menu-management')">Zarządzaj Menu</button>
+        <button class="btn-nav" @click="router.push('/obsluga')">Obsługa</button>
+        <button class="btn-nav" @click="router.push('/kuchnia')">Kuchnia</button>
+        <button class="btn-nav btn-nav--logout" @click="logout">Wyloguj</button>
+      </nav>
     </header>
 
-    <DateFilterBar @change="onFilterChange" />
+    <div class="admin-layout">
 
-    <!-- Przycisk Historia zamówień -->
-    <section style="margin-bottom: 1rem;">
-      <button class="btn-history" @click="showHistoryDialog = true">
-        📋 Historia zamówień
-      </button>
-    </section>
+      <DateFilterBar @change="onFilterChange" />
 
-    <!-- Podstawowe metryki -->
-    <section class="flex flex-col md:flex-row gap-4" style="margin-bottom: 1rem;">
-      <div class="card" style="flex: 1;">
-        <h2 style="font-size: 1.25rem; font-weight: 600;">Liczba zamówień</h2>
-        <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.9rem;">
-          <div>
-            <span style="color: #6b7280;">Na miejscu:</span>
-            <strong style="margin-left: 0.25rem;">{{ ordersOnSite }}</strong>
-          </div>
-          <div>
-            <span style="color: #6b7280;">Na wynos:</span>
-            <strong style="margin-left: 0.25rem;">{{ ordersToGo }}</strong>
-          </div>
-        </div>
-        <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
-          {{ totalOrders }}
-        </p>
-        <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 1rem;">Suma zamówień</h2>
-        <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
-          {{ totalRevenue.toFixed(2) }} zł
-        </p>
-        <h2 style="font-size: 1.25rem; font-weight: 600; margin-top: 1rem;">Wydane pojemniki</h2>
-        <p style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem;">
-          {{ totalContainers }}
-        </p>
-      </div>
-
-      <div class="card" style="flex: 2;">
-        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">
-          TOP pozycje
-        </h2>
-        <ul v-if="topItems.length > 0" class="flex flex-col gap-1">
-          <li v-for="(item, index) in topItems" :key="item.name" class="flex flex-row" style="justify-content: space-between; gap: 0.75rem;">
-            <span style="flex: 1;">{{ index + 1 }}. {{ item.name }}</span>
-            <strong style="min-width: 2.5rem; text-align: right;">{{ formatItemQuantity(item.quantity) }}</strong>
-            <strong style="min-width: 5.5rem; text-align: right; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</strong>
-          </li>
-        </ul>
-        <p v-else style="font-size: 0.9rem; color: #6b7280;">
-          Brak zamówień w wybranym okresie.
-        </p>
-        <button
-          v-if="topItems.length > 0"
-          class="btn-outline btn-sm"
-          @click="showAllItemsDialog = true"
-          style="margin-top: 0.75rem; width: 25%;"
-        >
-          Więcej
+      <!-- Przycisk Historia zamówień -->
+      <section style="margin-top: 1rem;">
+        <button class="btn-history" @click="showHistoryDialog = true">
+          📋 Historia zamówień
         </button>
-      </div>
-    </section>
+      </section>
 
-    <!-- Wykres godzinowy -->
-    <section class="card">
-      <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">
-        Liczba zamówień wg godziny
-      </h2>
-      <div v-if="chartData" class="chart-wrapper">
-        <Bar :data="chartData" :options="chartOptions" />
-      </div>
-      <p v-else style="font-size: 0.9rem; color: #6b7280;">Brak danych do wyświetlenia.</p>
-    </section>
+      <!-- Metryki + TOP pozycje -->
+      <div class="admin-top-grid">
 
-    <!-- Popup z wszystkimi pozycjami -->
-    <div v-if="showAllItemsDialog" class="dialog-backdrop" @click.self="showAllItemsDialog = false">
-      <div class="dialog-content">
-        <div class="dialog-header">
-          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Wszystkie pozycje</h2>
-          <button class="dialog-close" @click="showAllItemsDialog = false">✖</button>
+        <!-- Metryki -->
+        <div class="card">
+          <div class="metrics-grid">
+            <div class="metric-block">
+              <span class="metric-label">Zamówienia</span>
+              <span class="metric-value">{{ totalOrders }}</span>
+              <div class="metric-sub">
+                <span>Na miejscu: <strong>{{ ordersOnSite }}</strong></span>
+                <span>Na wynos: <strong>{{ ordersToGo }}</strong></span>
+              </div>
+            </div>
+            <div class="metric-block">
+              <span class="metric-label">Przychód</span>
+              <span class="metric-value orange">{{ totalRevenue.toFixed(2) }} zł</span>
+            </div>
+            <div class="metric-block">
+              <span class="metric-label">Pojemniki</span>
+              <span class="metric-value">{{ totalContainers }}</span>
+            </div>
+          </div>
         </div>
 
-        <div class="dialog-body">
+        <!-- TOP pozycje -->
+        <div class="card">
+          <div class="top-items-header">
+            <h2 class="card-section-title">🏆 TOP pozycje</h2>
+            <button
+              v-if="topItems.length > 0"
+              class="btn-nav"
+              style="font-size: 0.85rem; padding: 0.3rem 0.8rem;"
+              @click="showAllItemsDialog = true"
+            >
+              Wszystkie →
+            </button>
+          </div>
+          <ul v-if="topItems.length > 0" class="top-items-list">
+            <li v-for="(item, index) in topItems" :key="item.name" class="top-item-row">
+              <span class="top-item-rank">{{ index + 1 }}</span>
+              <span class="top-item-name">{{ item.name }}</span>
+              <strong class="top-item-qty">{{ formatItemQuantity(item.quantity) }}</strong>
+              <strong class="top-item-rev">{{ item.revenue.toFixed(2) }} zł</strong>
+            </li>
+          </ul>
+          <p v-else class="empty-hint muted">Brak zamówień w wybranym okresie.</p>
+        </div>
+      </div>
+
+      <!-- Wykres godzinowy -->
+      <section class="card" style="margin-top: 1rem;">
+        <h2 class="card-section-title" style="margin-bottom: 0.75rem;">📊 Zamówienia wg godziny</h2>
+        <div v-if="chartData" class="chart-wrapper">
+          <Bar :data="chartData" :options="chartOptions" />
+        </div>
+        <p v-else class="empty-hint muted">Brak danych do wyświetlenia.</p>
+      </section>
+
+    </div>
+
+    <!-- ===== DIALOG: Wszystkie pozycje ===== -->
+    <div v-if="showAllItemsDialog" class="dialog-backdrop" @click.self="showAllItemsDialog = false">
+      <div class="dialog-panel">
+        <div class="dialog-panel-header">
+          <h2 class="dialog-panel-title">Wszystkie pozycje</h2>
+          <button class="dialog-close-btn" @click="showAllItemsDialog = false">✖</button>
+        </div>
+        <div class="dialog-panel-body">
           <table class="items-table">
             <thead>
               <tr>
-                <th style="text-align: left; padding: 0.75rem;">Pozycja</th>
-                <th style="text-align: right; padding: 0.75rem;">Ilość</th>
-                <th style="text-align: right; padding: 0.75rem;">Suma</th>
+                <th style="text-align: left;">#</th>
+                <th style="text-align: left;">Pozycja</th>
+                <th style="text-align: right;">Ilość</th>
+                <th style="text-align: right;">Suma</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(item, index) in allItems" :key="item.name">
-                <td style="padding: 0.75rem;">{{ index + 1 }}. {{ item.name }}</td>
-                <td style="text-align: right; padding: 0.75rem; font-weight: 600;">{{ item.displayQuantity }}</td>
-                <td style="text-align: right; padding: 0.75rem; font-weight: 700; color: #e67700;">{{ item.revenue.toFixed(2) }} zł</td>
+                <td style="color: var(--muted); width: 2rem;">{{ index + 1 }}</td>
+                <td>{{ item.name }}</td>
+                <td style="text-align: right; font-weight: 600;">{{ item.displayQuantity }}</td>
+                <td style="text-align: right;" class="col-revenue">{{ item.revenue.toFixed(2) }} zł</td>
               </tr>
             </tbody>
           </table>
@@ -111,49 +117,45 @@
       </div>
     </div>
 
-    <!-- Popup Historia zamówień -->
+    <!-- ===== DIALOG: Historia zamówień ===== -->
     <div v-if="showHistoryDialog" class="dialog-backdrop" @click.self="showHistoryDialog = false">
-      <div class="dialog-content history-dialog">
-        <div class="dialog-header">
-          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Historia zamówień</h2>
-          <button class="dialog-close" @click="showHistoryDialog = false">✖</button>
+      <div class="dialog-panel dialog-panel--wide">
+        <div class="dialog-panel-header">
+          <h2 class="dialog-panel-title">Historia zamówień</h2>
+          <button class="dialog-close-btn" @click="showHistoryDialog = false">✖</button>
         </div>
+        <div class="dialog-panel-body">
 
-        <div class="dialog-body">
-          <div v-if="groupedOrders.length === 0" style="padding: 2rem; text-align: center; color: #6b7280;">
+          <div v-if="groupedOrders.length === 0" class="empty-hint muted" style="padding: 2rem;">
             Brak zamówień w wybranym okresie
           </div>
+
           <div v-else>
             <div v-for="group in groupedOrders" :key="group.period" class="history-group">
               <div class="history-group-header">
-                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0;">{{ group.period }}</h3>
-                <div style="display: flex; gap: 1.5rem; font-size: 0.9rem;">
+                <h3 class="history-group-title">{{ group.period }}</h3>
+                <div class="history-group-meta">
                   <span>Zamówienia: <strong>{{ group.count }}</strong></span>
-                  <span style="color: #e67700;">Suma: <strong>{{ group.total.toFixed(2) }} zł</strong></span>
+                  <span class="revenue">Suma: <strong>{{ group.total.toFixed(2) }} zł</strong></span>
                 </div>
               </div>
               <div class="history-orders">
                 <div v-for="order in group.orders" :key="order.id" class="history-order-item">
-                  <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                    <div>
-                      <strong style="font-size: 1rem;">#{{ order.number }}</strong>
-                      <span style="margin-left: 0.5rem; color: #6b7280; font-size: 0.875rem;">
-                        {{ formatOrderTime(order.createdAt) }}
-                      </span>
+                  <div class="history-order-top">
+                    <div class="history-order-meta">
+                      <span class="history-order-num">#{{ order.number }}</span>
+                      <span class="history-order-time">{{ formatOrderTime(order.createdAt) }}</span>
                       <span
-                        style="margin-left: 0.5rem; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;"
-                        :style="{
-                          background: order.type === 'na_miejscu' ? '#dbeafe' : '#fef3c7',
-                          color: order.type === 'na_miejscu' ? '#1e40af' : '#92400e'
-                        }"
+                        class="order-type-badge"
+                        :class="order.type === 'na_miejscu' ? 'order-type-badge--site' : 'order-type-badge--go'"
                       >
                         {{ order.type === 'na_miejscu' ? 'Na miejscu' : 'Na wynos' }}
                       </span>
                     </div>
-                    <strong style="color: #e67700; font-size: 1.1rem;">{{ calculateOrderTotal(order).toFixed(2) }} zł</strong>
+                    <span class="history-order-total">{{ calculateOrderTotal(order).toFixed(2) }} zł</span>
                   </div>
-                  <div style="font-size: 0.875rem; color: #6b7280;">
-                    <div v-for="item in order.items" :key="item.name" style="margin-bottom: 0.25rem;">
+                  <div class="history-order-items">
+                    <div v-for="item in order.items" :key="item.name">
                       • {{ item.name }}
                       <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">
                         {{ item.count }}×
@@ -169,9 +171,11 @@
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -493,227 +497,131 @@ const formatQuantity = (qty) => {
 
 </script>
 
-
 <style scoped>
-/* Stabilny kontener dla wykresu, aby nie rozjeżdżał układu */
-.chart-wrapper {
-  position: relative;
-  height: 320px;
-  min-height: 240px;
+/* ===================== LAYOUT ===================== */
+.admin-root {
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text);
 }
-@media (max-width: 768px) {
-  .chart-wrapper {
-    height: 260px;
+
+.admin-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 2rem;
+}
+
+/* ===================== TOP GRID (metryki + TOP) ===================== */
+.admin-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .admin-top-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-.md\:flex-row {
-  flex-direction: row;
-}
-@media (max-width: 768px) {
-  .md\:flex-row {
-    flex-direction: column;
-  }
-}
-
-/* Przycisk Historia zamówień */
-.btn-history {
-  width: 100%;
-  background: linear-gradient(135deg, #ff8a3c 0%, #e67700 100%);
-  color: white;
-  padding: 1rem 1.5rem;
-  border: none;
-  border-radius: 1rem;
-  font-weight: 700;
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(230, 119, 0, 0.3);
+/* ===================== KARTY ===================== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 1.25rem;
+  border: 1px solid var(--border-subtle);
 }
 
-.btn-history:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(230, 119, 0, 0.4);
+.card-section-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem;
+  color: var(--text);
 }
 
-.btn-history:active {
-  transform: translateY(0);
+/* ===================== METRYKI ===================== */
+.orange {
+  color: var(--orange-dark);
 }
 
-
-/* Styl przycisków jak w panelu obsługi */
-.btn-outline {
-  background: white;
-  border: 2px solid #ff8a3c;
-  color: #e67700;
-  padding: 0.6rem 1.2rem;
-  border-radius: 9999px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.btn-outline:hover {
-  background: #ff8a3c;
-  color: black;
-}
-.btn-sm {
-  font-size: 0.9rem;
-  padding: 0.4rem 0.8rem;
-}
-
-
-/* Dialog / Popup */
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  padding: 1rem;
-}
-
-.dialog-content {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  max-width: 800px;
-  width: 100%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.history-dialog {
-  max-width: 1000px;
-}
-
-.dialog-header {
+/* ===================== TOP POZYCJE ===================== */
+.top-items-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 0.75rem;
 }
 
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #6b7280;
-  padding: 0.5rem;
-  transition: color 0.2s ease;
-}
-
-.dialog-close:hover {
-  color: #e67700;
-}
-
-.dialog-body {
+.top-items-list {
+  list-style: none;
   padding: 0;
-  overflow-y: auto;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.top-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.6rem;
+  background: #f9fafb;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.95rem;
+  transition: background 0.12s;
+}
+
+.top-item-row:hover {
+  background: var(--orange-soft);
+  border-color: #ffd6aa;
+}
+
+.top-item-rank {
+  font-weight: 800;
+  color: var(--muted);
+  min-width: 1.2rem;
+  font-size: 0.85rem;
+}
+
+.top-item-name {
   flex: 1;
 }
 
-/* Historia zamówień */
-.history-group {
-  border-bottom: 2px solid #e5e7eb;
+.top-item-qty {
+  min-width: 2.5rem;
+  text-align: right;
 }
 
-.history-group:last-child {
-  border-bottom: none;
+.top-item-rev {
+  min-width: 5.5rem;
+  text-align: right;
+  color: var(--orange-dark);
 }
 
-.history-group-header {
-  background: #f9fafb;
-  padding: 1rem 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e5e7eb;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.history-orders {
-  padding: 1rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.history-order-item {
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.75rem;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
-}
-
-.history-order-item:hover {
-  background: #ffe8d5;
-  border-color: #ff8a3c;
-}
-
-/* Tabela pozycji */
-.items-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.items-table thead {
-  background: #f9fafb;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.items-table th {
-  font-weight: 700;
-  color: #374151;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.items-table tbody tr {
-  border-bottom: 1px solid #e5e7eb;
-  transition: background-color 0.15s ease;
-}
-
-.items-table tbody tr:hover {
-  background-color: #ffe8d5;
-}
-
-.items-table tbody tr:last-child {
-  border-bottom: none;
+/* ===================== WYKRES ===================== */
+.chart-wrapper {
+  position: relative;
+  height: 300px;
+  min-height: 220px;
 }
 
 @media (max-width: 768px) {
-  .dialog-content {
-    max-width: 95vw;
-    max-height: 85vh;
+  .chart-wrapper {
+    height: 240px;
   }
+}
 
-  .items-table th,
-  .items-table td {
-    padding: 0.5rem !important;
-    font-size: 0.875rem;
-  }
+/* ===================== HELPERS ===================== */
+.empty-hint {
+  text-align: center;
+  padding: 1rem 0;
+}
 
-  .history-group-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .btn-history {
-    font-size: 1rem;
-    padding: 0.875rem 1.25rem;
-  }
+.muted {
+  color: var(--muted);
 }
 </style>
