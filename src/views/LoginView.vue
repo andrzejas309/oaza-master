@@ -1,40 +1,41 @@
 <template>
-  <div class="view-container flex flex-col items-center justify-center" style="min-height: 100vh;">
-    <div class="card" style="width: 100%; max-width: 420px;">
-      <h1 style="font-size: 1.5rem; margin-bottom: 1rem; text-align: center;">Gastro Panel – logowanie</h1>
+  <div class="login-bg">
+    <div class="login-overlay"></div>
 
-      <form @submit.prevent="onSubmit" class="flex flex-col gap-4">
-        <div>
-          <label class="block mb-1">E-mail</label>
+    <div class="login-card">
+      <div class="login-logo">🍽️</div>
+      <h1 class="login-title">Gastro Panel</h1>
+      <p class="login-subtitle">Zaloguj się, aby kontynuować</p>
+
+      <form @submit.prevent="onSubmit" class="login-form">
+        <div class="input-group">
+          <label class="input-label">E-mail</label>
           <input
               v-model="email"
               type="email"
               required
-              class="w-full"
-              style="padding: 0.5rem; border-radius: 0.5rem; border: 1px solid #d1d5db; width: 100%;"
+              class="input-field"
+              placeholder="twoj@email.com"
           />
         </div>
-        <div>
-          <label class="block mb-1">Hasło</label>
+
+        <div class="input-group">
+          <label class="input-label">Hasło</label>
           <input
               v-model="password"
               type="password"
               required
-              class="w-full"
-              style="padding: 0.5rem; border-radius: 0.5rem; border: 1px solid #d1d5db; width: 100%;"
+              class="input-field"
+              placeholder="••••••••"
           />
         </div>
 
-        <button class="btn" type="submit" :disabled="loading">
-          {{ loading ? 'Logowanie...' : 'Zaloguj' }}
-        </button>
+        <p v-if="error" class="login-error">⚠️ {{ error }}</p>
 
-        <p v-if="error" style="color: #b91c1c; font-size: 0.9rem;">{{ error }}</p>
-<!--        <p style="font-size: 0.8rem; color: #6b7280;">-->
-<!--          Testowo możesz np. założyć konta:-->
-<!--          <br>-->
-<!--          obsluga@example.com, kuchnia@example.com, admin@example.com-->
-<!--        </p>-->
+        <button class="login-btn" type="submit" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          {{ loading ? 'Logowanie...' : 'Zaloguj się' }}
+        </button>
       </form>
     </div>
   </div>
@@ -94,3 +95,161 @@ const onSubmit = async () => {
   }
 }
 </script>
+
+<style scoped>
+.login-bg {
+  min-height: 100vh;
+  width: 100%;
+  background: url('/background.jpg') center center / cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 1.5rem;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.login-logo {
+  font-size: 3rem;
+  margin-bottom: 0.25rem;
+}
+
+.login-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.login-subtitle {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 1.25rem 0;
+}
+
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.input-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.input-field {
+  padding: 0.8rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-field::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.input-field:focus {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.login-error {
+  background: rgba(185, 28, 28, 0.35);
+  border: 1px solid rgba(185, 28, 28, 0.6);
+  color: #fecaca;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.login-btn {
+  margin-top: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: #8fbc8f;
+  color: #1a3a1a;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-btn:hover:not([disabled]) {
+  background: #7aad7a;
+}
+
+.login-btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(26, 58, 26, 0.3);
+  border-top-color: #1a3a1a;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    margin: 1rem;
+    padding: 2rem 1.25rem;
+  }
+}
+</style>
+
