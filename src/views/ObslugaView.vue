@@ -934,16 +934,19 @@ const logout = async () => {
 
 /* GŁÓWNY KONTAINER */
 .view-container {
-  background: var(--bg);
   min-height: 100vh;
   padding: 1.5rem;
   font-family: 'Inter', sans-serif;
   color: var(--text);
+  position: relative;
 }
+
 
 .obsluga-layout {
   max-width: 1100px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 /* KARTY */
@@ -1299,8 +1302,9 @@ button[disabled] {
 }
 .order-number {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 0.5rem;
   font-weight: 700;
   color: var(--orange-dark);
   margin-bottom: 0.2rem;

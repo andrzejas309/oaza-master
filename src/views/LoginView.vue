@@ -100,7 +100,7 @@ const onSubmit = async () => {
 .login-bg {
   min-height: 100vh;
   width: 100%;
-  background: url('/background.jpg') center center / cover no-repeat;
+  background: url('/bcg.png') center center / cover no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;

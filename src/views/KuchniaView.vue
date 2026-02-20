@@ -154,7 +154,7 @@ const formatTime = (ts) => {
 }
 
 .view-container {
-  background: var(--bg);
+  background: transparent;
   min-height: 100vh;
   padding: 1.5rem;
   font-family: 'Inter', sans-serif;
