@@ -20,7 +20,10 @@
           >
             <!-- kolorowy pasek zależny od typu -->
             <div class="order-top" :class="orderTypeClass(order)">
-              <div class="order-number">Zamówienie #{{ order.number }}</div>
+              <div class="order-number">
+                Zamówienie #{{ order.number }}
+                <span v-if="order.edited" class="edited-badge">✏️ EDITED</span>
+              </div>
               <div class="order-meta">
                 {{ formatTime(order.createdAt) }}
                 <span v-if="order.waiter">, {{ order.waiter }}</span>
