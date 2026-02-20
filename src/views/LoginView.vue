@@ -41,6 +41,10 @@
 </template>
 
 <script setup>
+/**
+ * AI: Vue component should contain only presentation logic.
+ * Move business logic to composables.
+ */
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { signInWithEmailAndPassword } from 'firebase/auth'

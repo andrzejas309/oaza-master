@@ -353,6 +353,10 @@
 </template>
 
 <script setup>
+/**
+ * AI: Vue component should contain only presentation logic.
+ * Move business logic to composables.
+ */
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
