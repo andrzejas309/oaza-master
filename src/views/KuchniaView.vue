@@ -69,6 +69,11 @@
 </template>
 
 <script setup>
+/**
+ * AI: Vue component should contain only presentation logic.
+ * Move business logic to composables.
+ */
+
 import { ref, onMounted, onUnmounted } from 'vue'
 import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
@@ -265,7 +270,30 @@ const formatTime = (ts) => {
 
 .order-number {
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
+
+.edited-badge {
+  display: inline-block;
+  background: #e03131;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.4rem;
+  text-transform: uppercase;
+  animation: blink 1.2s step-start infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
 .order-meta {
   font-size: 0.8rem;
   opacity: 0.9;

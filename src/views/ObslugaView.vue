@@ -3,28 +3,32 @@
     <!-- HEADER -->
     <header class="obsluga-header">
       <h1 class="obsluga-title">Panel Obsługi</h1>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <button class="btn-outline btn-sm" @click="router.push('/admin')">Admin</button>
-        <button class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <button v-if="userRole === 'admin'" class="btn-outline btn-sm" @click="router.push('/admin')">Admin</button>
+        <button v-if="userRole === 'admin'" class="btn-outline btn-sm" @click="router.push('/kuchnia')">Kuchnia</button>
         <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
       </div>
     </header>
 
     <!-- AKCJE -->
     <div class="actions-bar">
-      <button class="btn-sage btn-large" @click="toggleOrderForm">
-        {{ showForm ? '✖ Anuluj' : '+ Dodaj zamówienie' }}
-      </button>
+      <div class="actions-bar-spacer"></div>
+      <div class="actions-bar-center">
+        <template v-if="showForm">
+          <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_miejscu' }" @touchstart.prevent="selectedOrderType = 'na_miejscu'" @click="selectedOrderType = 'na_miejscu'">Na miejscu</button>
+          <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_wynos' }" @touchstart.prevent="selectedOrderType = 'na_wynos'" @click="selectedOrderType = 'na_wynos'">Na wynos</button>
+        </template>
+      </div>
+      <div class="actions-bar-right">
+        <button class="btn-sage btn-large" @click="toggleOrderForm">
+          {{ showForm ? '✖ Anuluj' : (editingOrderId ? '✏️ Edytuj zamówienie' : '+ Dodaj zamówienie') }}
+        </button>
+      </div>
     </div>
 
     <!-- SEKCJA DODAWANIA ZAMÓWIENIA -->
     <section v-if="showForm" class="card order-form">
-      <h2 class="section-title">Nowe zamówienie</h2>
-      <div class="order-type-buttons">
-        <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_miejscu' }" @click="selectedOrderType = 'na_miejscu'">Na miejscu</button>
-        <button class="order-type-pill" :class="{ active: selectedOrderType === 'na_wynos' }" @click="selectedOrderType = 'na_wynos'">Na wynos</button>
-      </div>
-      <p class="muted">Kliknij na danie, aby dodać do zamówienia.</p>
+      <h3 class="section-title">{{ editingOrderId ? 'Edytuj zamówienie' : 'Nowe zamówienie' }}</h3>
 
       <!-- MENU -->
       <div class="menu-section">
@@ -35,6 +39,7 @@
               :key="cat"
               class="letter-pill"
               :class="{ active: selectedCategory === cat }"
+              @touchstart.prevent="selectedCategory = cat"
               @click="selectedCategory = cat"
           >
             {{ cat }}
@@ -71,7 +76,7 @@
             <div>
               <div>
                 {{ item.name }}
-                <span class="muted">
+                <span class="portion-label">
                   ({{ formatPortionLabel(item.quantity, item.name) }})
                 </span>
                 <span v-if="item.count > 1" class="count-badge">x{{ item.count }}</span>
@@ -97,14 +102,6 @@
                   +
                 </button>
                 <button
-                    class="icon-btn subtract"
-                    @click="decreaseOrderItemCount(item.name, item.quantity, item.extras)"
-                    title="Usuń jedną pozycję"
-                    :disabled="item.count <= 1"
-                >
-                  −
-                </button>
-                <button
                     v-if="canEditItem(item)"
                     class="icon-btn edit"
                     @click="startEditItem(item)"
@@ -113,11 +110,11 @@
                   ✏️
                 </button>
                 <button
-                    class="icon-btn delete"
-                    @click="removeItemByKey(item.key)"
-                    title="Usuń pozycję"
+                    class="icon-btn subtract"
+                    @click="item.count <= 1 ? removeItemByKey(item.key) : decreaseOrderItemCount(item.name, item.quantity, item.extras)"
+                    :title="item.count <= 1 ? 'Usuń pozycję' : 'Usuń jedną pozycję'"
                 >
-                  ✖
+                  −
                 </button>
               </div>
             </div>
@@ -130,9 +127,9 @@
             <span>Pojemniki</span>
           </div>
           <div class="containers-controls">
-            <button class="counter-btn" @click="decreaseContainers">−</button>
-            <span class="counter-value">{{ containerCount }}</span>
             <button class="counter-btn" @click="increaseContainers">+</button>
+            <span class="counter-value">{{ containerCount }}</span>
+            <button class="counter-btn" @click="decreaseContainers">−</button>
           </div>
         </div>
 
@@ -149,7 +146,7 @@
               @click="saveOrder"
               :disabled="!orderItems.length || saving || !selectedOrderType"
           >
-            ✅ {{ saving ? 'Zapisywanie...' : 'Zapisz zamówienie' }}
+            ✅ {{ saving ? 'Zapisywanie...' : (editingOrderId ? 'Zaktualizuj zamówienie' : 'Zapisz zamówienie') }}
           </button>
         </div>
       </div>
@@ -169,10 +166,8 @@
         >
           <div class="order-info">
             <div class="order-number">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>#{{ order.number }}</span>
-                <span class="order-time">{{ formatTime(order.createdAt) }}</span>
-              </div>
+              <span>#{{ order.number }}</span>
+              <span class="order-time">{{ formatTime(order.createdAt) }}</span>
             </div>
             <div class="order-items">
               <div
@@ -182,7 +177,7 @@
               >
                 <div>
                   {{ item.name }}
-                  <span class="muted">
+                  <span class="portion-label">
                     ({{ formatPortionLabel(item.quantity ?? 1, item.name) }})
                   </span>
                 </div>
@@ -191,17 +186,26 @@
                     class="muted"
                     style="font-size: 0.8rem;"
                 >
+
                   + {{ item.extras.join(', ') }}
                 </div>
               </div>
             </div>
           </div>
-          <button
-              class="btn-sage-outline btn-sm"
-              @click="markAsReady(order)"
-          >
-            Gotowe
-          </button>
+          <div class="order-card-actions">
+            <button
+                class="btn-sage-outline btn-sm"
+                @click="startEditOrder(order)"
+            >
+              Edytuj
+            </button>
+            <button
+                class="btn-sage-outline btn-sm"
+                @click="markAsReady(order)"
+            >
+              Gotowe
+            </button>
+          </div>
         </div>
       </transition-group>
 
@@ -227,10 +231,8 @@
         >
           <div class="order-info">
             <div class="order-number">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>#{{ order.number }}</span>
-                <span class="order-time">{{ formatTime(order.createdAt) }}</span>
-              </div>
+              <span>#{{ order.number }}</span>
+              <span class="order-time">{{ formatTime(order.createdAt) }}</span>
             </div>
             <div class="order-items">
               <div
@@ -240,7 +242,7 @@
               >
                 <div>
                   {{ item.name }}
-                  <span class="muted">
+                  <span class="portion-label">
                     ({{ formatPortionLabel(item.quantity ?? 1, item.name) }})
                   </span>
                 </div>
@@ -254,12 +256,20 @@
               </div>
             </div>
           </div>
-          <button
-              class="btn-sage-outline btn-sm"
-              @click="markAsReady(order)"
-          >
-            Gotowe
-          </button>
+          <div class="order-card-actions">
+            <button
+                class="btn-sage-outline btn-sm"
+                @click="startEditOrder(order)"
+            >
+              Edytuj
+            </button>
+            <button
+                class="btn-sage-outline btn-sm"
+                @click="markAsReady(order)"
+            >
+              Gotowe
+            </button>
+          </div>
         </div>
       </transition-group>
 
@@ -356,6 +366,7 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useMenu } from '@/composables/useMenu'
+import { getRoleForEmail } from '@/router/index'
 
 const router = useRouter()
 
@@ -433,6 +444,8 @@ const selectedOrderType = ref(null)
 const selectedCategory = ref('zupy')
 const containerCount = ref(0)
 const orderDraft = reactive({ items: {} })
+const editingOrderId = ref(null)
+const userRole = ref(null)
 
 // Dialog state
 const portionDialogOpen = ref(false)
@@ -453,11 +466,17 @@ let unsub = null
 
 // ==================== Lifecycle ====================
 onMounted(() => {
-  fetchMenu() // Załaduj menu z Firestore
+  fetchMenu()
   unsub = onSnapshot(collection(db, 'orders'), (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     activeOrders.value = all.filter((o) => o.status === 'w_toku')
   })
+  const currentUser = auth.currentUser
+  if (currentUser?.email) {
+    getRoleForEmail(currentUser.email).then(role => {
+      userRole.value = role
+    })
+  }
 })
 
 onUnmounted(() => unsub && unsub())
@@ -812,26 +831,70 @@ const toggleOrderForm = () => {
     orderDraft.items = {}
     selectedOrderType.value = null
     containerCount.value = 0
+    editingOrderId.value = null
   }
+}
+
+const startEditOrder = (order) => {
+  // Wyczyść bieżący draft
+  orderDraft.items = {}
+
+  // Załaduj typ zamówienia
+  selectedOrderType.value = order.type
+
+  // Załaduj pojemniki
+  containerCount.value = order.containers || 0
+
+  // Załaduj pozycje — odbuduj orderDraft.items z zapisanych danych
+  for (const item of order.items) {
+    const name = item.name
+    const quantity = item.quantity ?? 1
+    const extras = item.extras || []
+    const count = item.count || 1
+    const key = generateItemKey(name, quantity, extras)
+    orderDraft.items[key] = { name, quantity, count, extras: [...extras] }
+  }
+
+  // Ustaw tryb edycji
+  editingOrderId.value = order.id
+
+  // Pokaż formularz i przewiń do góry
+  showForm.value = true
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 // ==================== Order Operations ====================
 const saveOrder = async () => {
   if (!orderItems.value.length) return
   saving.value = true
-  await addDoc(collection(db, 'orders'), {
-    number: Date.now(),
-    items: orderItems.value,
-    containers: containerCount.value,
-    type: selectedOrderType.value,
-    status: 'w_toku',
-    createdAt: serverTimestamp(),
-  })
+
+  if (editingOrderId.value) {
+    // Tryb edycji — zaktualizuj istniejące zamówienie
+    await updateDoc(doc(db, 'orders', editingOrderId.value), {
+      items: orderItems.value,
+      containers: containerCount.value,
+      type: selectedOrderType.value,
+      edited: true,
+    })
+  } else {
+    // Nowe zamówienie
+    await addDoc(collection(db, 'orders'), {
+      number: Date.now(),
+      items: orderItems.value,
+      containers: containerCount.value,
+      type: selectedOrderType.value,
+      status: 'w_toku',
+      createdAt: serverTimestamp(),
+    })
+  }
+
   orderDraft.items = {}
   selectedOrderType.value = null
   containerCount.value = 0
+  editingOrderId.value = null
   showForm.value = false
   saving.value = false
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 const markAsReady = async (order) => {
@@ -885,7 +948,7 @@ const logout = async () => {
   border-radius: var(--radius);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   padding: 1.25rem;
-  margin-top: 1rem;
+  margin-top: 0.4rem;
   border: 1px solid var(--border-subtle);
 }
 
@@ -893,18 +956,43 @@ const logout = async () => {
 .obsluga-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   background: linear-gradient(90deg, var(--orange-dark), var(--orange));
   color: black;
-  padding: 1rem 1.5rem;
+  padding: 0.6rem 1rem;
   border-radius: var(--radius);
 }
 .obsluga-title {
   font-size: 1.8rem;
   font-weight: 800;
+  padding-top: 0.1rem;
 }
 
-/* PRZYCISKI – zielono/pomarańczowe, bez białych na białym */
+/* Pasek akcji */
+.actions-bar {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+}
+
+.actions-bar-spacer {
+  flex: 1;
+}
+
+.actions-bar-center {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.actions-bar-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* PRZYCISKI – spójna zielona paleta */
 button {
   font-family: inherit;
 }
@@ -915,21 +1003,25 @@ button {
   border-radius: 9999px;
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
   border: none;
 }
 
-/* Zielony przycisk główny */
+/* Zielony przycisk główny (Dodaj zamówienie / Anuluj / Zapisz) – zawsze #8fbc8f, bez zmiany przy hover */
 .btn-sage {
   background: #8fbc8f;
-  color: black;
+  color: #1a3a1a;
   padding: 0.7rem 1.4rem;
   font-size: 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .btn-sage:hover {
-  background: var(--green-dark);
-  transform: translateY(-1px);
+  background: #8fbc8f;
+  color: #1a3a1a;
+}
+.btn-sage:active {
+  background: #8fbc8f;
+  color: #1a3a1a;
 }
 
 /* Większe przyciski dla głównych akcji */
@@ -940,32 +1032,37 @@ button {
   min-height: 50px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
-.btn-large:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-}
 
-/* Przyciski typu outline – zielono/pomarańczowe obramowanie */
+/* Przyciski nawigacyjne w headerze (Admin / Kuchnia / Wyloguj) – szare, bez hover-koloru */
 .btn-outline {
-  background: white;
-  border: 2px solid var(--orange);
-  color: var(--orange-dark);
+  background: #e5e7eb;
+  border: 2px solid #9ca3af;
+  color: #374151;
   padding: 0.6rem 1.2rem;
 }
 .btn-outline:hover {
-  background: var(--orange);
-  color: black;
+  background: #e5e7eb;
+  color: #374151;
+  border-color: #9ca3af;
+}
+.btn-outline:active {
+  background: #d1d5db;
 }
 
-/* Przyciski w kartach zamówień */
+/* Przyciski w kartach zamówień (Gotowe / Edytuj) – szare, bez hover-koloru */
 .btn-sage-outline {
-  border: 2px solid var(--green-dark);
-  background: #7c7c7c;
-  color: var(--green-dark);
+  border: 2px solid #9ca3af;
+  background: #e5e7eb;
+  color: #374151;
   padding: 0.45rem 1rem;
 }
 .btn-sage-outline:hover {
-  background: var(--green-dark);
-  color: white;
+  background: #e5e7eb;
+  color: #374151;
+  border-color: #9ca3af;
+}
+.btn-sage-outline:active {
+  background: #d1d5db;
 }
 
 .btn-sm {
@@ -973,45 +1070,36 @@ button {
   padding: 0.4rem 0.8rem;
 }
 
-/* Pasek akcji */
-.actions-bar {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-}
 
 /* Przyciski typu zamówienia */
-.order-type-buttons {
-  display: flex;
-  gap: 2rem;
-  margin-bottom: 1rem;
-  grid-column: 1 / -1;
-  justify-content: center;
-  align-items: center;
-}
-
 .order-type-pill {
   border-radius: 9999px;
   background: #e5e7eb;
-  padding: 1.2rem 3rem;
-  font-weight: 600;
+  color: #374151;
+  padding: 1rem 2rem;
+  font-weight: 700;
   border: none;
   cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 1.15rem;
+  min-height: 50px;
+  transition: background 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .order-type-pill:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  background: #e5e7eb;
 }
+
 
 .order-type-pill.active {
   background: #8fbc8f;
-  color: black;
+  color: #1a3a1a;
   box-shadow: 0 0 0 3px var(--green-soft);
-  transform: scale(1.05);
+}
+.order-type-pill.active:hover,
+.order-type-pill.active:active {
+  background: #8fbc8f;
+  color: #1a3a1a;
 }
 
 /* SEKCJA FORMULARZA ZAMÓWIENIA */
@@ -1020,7 +1108,7 @@ button {
   grid-template-columns: 1.5fr 1.5fr;
   column-gap: 1.5rem;
   row-gap: 0.75rem;
-  align-items: flex-start;
+  align-items: start;
 }
 
 .order-form > .section-title,
@@ -1032,6 +1120,8 @@ button {
   grid-column: 2;
   border-left: 3px solid #ffc078;
   padding-left: 1rem;
+  position: sticky;
+  top: 0.5rem;
 }
 
 /* ALFABET + MENU */
@@ -1044,22 +1134,27 @@ button {
 .letter-pill {
   border-radius: 9999px;
   background: #e5e7eb;
+  color: #374151;
   padding: 0.5rem 1rem;
   font-weight: 600;
   border: none;
   cursor: pointer;
   font-size: 0.95rem;
   min-height: 40px;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease;
 }
 .letter-pill.active {
   background: #8fbc8f;
-  color: black;
+  color: #1a3a1a;
   box-shadow: 0 0 0 2px var(--green-soft);
 }
 .letter-pill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: #e5e7eb;
+}
+.letter-pill.active:hover,
+.letter-pill.active:active {
+  background: #8fbc8f;
+  color: #1a3a1a;
 }
 
 .menu-list {
@@ -1130,10 +1225,10 @@ button {
   justify-content: stretch;
   position: sticky;
   bottom: 0;
-  background: white;
+  background: var(--green-soft);
   margin: 0 -1.25rem -1.25rem;
   padding: 1rem 1.25rem;
-  border-top: 2px solid var(--border-subtle);
+  border-top: 2px solid #8fbc8f;
 }
 
 .order-actions button {
@@ -1199,9 +1294,17 @@ button[disabled] {
   box-shadow: 0 2px 8px rgba(230, 119, 0, 0.25);
 }
 .order-number {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-weight: 700;
   color: var(--orange-dark);
   margin-bottom: 0.2rem;
+  width: 100%;
+}
+.order-info {
+  flex: 1;
+  min-width: 0;
 }
 .order-time {
    font-size: 1.1rem;
@@ -1225,6 +1328,12 @@ button[disabled] {
 }
 .muted {
   color: var(--muted);
+}
+
+.portion-label {
+  color: #3a9a52;
+  font-size: 0.88em;
+  font-weight: 500;
 }
 
 /* RWD – węższe ekrany */
@@ -1325,7 +1434,7 @@ button[disabled] {
 .icon-btn.add {
   border: 1px solid #2f9e44;
   background: #d3f9d8;
-  color: #2f9e44;
+  color: #000000;
   font-weight: 700;
   font-size: 1.15rem;
   padding: 0.5rem 0.7rem;
@@ -1334,14 +1443,18 @@ button[disabled] {
 }
 
 .icon-btn.add:hover {
-  background: #8fbc8f;
-  color: black;
+  background: #d3f9d8;
+  color: #000000;
+}
+
+.icon-btn.add:active {
+  background: #d3f9d8;
 }
 
 .icon-btn.subtract {
   border: 1px solid #cc0000;
   background: #ffe3e3;
-  color: #cc0000;
+  color: #000000;
   font-weight: 700;
   font-size: 1.15rem;
   padding: 0.5rem 0.7rem;
@@ -1349,19 +1462,16 @@ button[disabled] {
   min-height: 40px;
 }
 
-.icon-btn.subtract:hover:not([disabled]) {
+.icon-btn.subtract:hover {
   background: #ff9999;
-  color: black;
+  color: #000000;
 }
 
-.icon-btn.subtract[disabled] {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 
 .icon-btn.edit {
   border: 1px solid #f59f00;
   background: #fff7e6;
+  color: #e67700;
   font-size: 1rem;
   padding: 0.4rem 0.6rem;
   min-width: 40px;
@@ -1369,21 +1479,14 @@ button[disabled] {
 }
 
 .icon-btn.edit:hover {
-  background: #ffd08a;
+  background: #fff7e6;
+  color: #e67700;
 }
 
-.icon-btn.delete {
-  border: 1px solid #e03131;
-  background: #ffe3e3;
-  font-size: 1rem;
-  padding: 0.4rem 0.6rem;
-  min-width: 40px;
-  min-height: 40px;
+.icon-btn.edit:active {
+  background: #ffe8b2;
 }
 
-.icon-btn.delete:hover {
-  background: #ffc9c9;
-}
 
 /* Pojemniki */
 .containers-row {
@@ -1410,7 +1513,7 @@ button[disabled] {
 
 .counter-btn {
   background: #8fbc8f;
-  color: black;
+  color: #1a3a1a;
   border: none;
   border-radius: 50%;
   width: 2.5rem;
@@ -1418,15 +1521,18 @@ button[disabled] {
   cursor: pointer;
   font-weight: 700;
   font-size: 1.3rem;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .counter-btn:hover {
-  background: var(--green-dark);
-  transform: scale(1.1);
+  background: #8fbc8f;
+}
+
+.counter-btn:active {
+  background: #7aad7a;
 }
 
 .counter-value {
@@ -1470,6 +1576,14 @@ button[disabled] {
 .gram-input::placeholder {
   color: var(--muted);
   font-weight: 400;
+}
+
+.order-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: stretch;
+  min-width: 90px;
 }
 
 /* Usuń strzałki z input type=number */

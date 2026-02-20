@@ -1,6 +1,8 @@
 /* PODSTAWY */
 * {
     box-sizing: border-box;
+    /* Blokada zoom gestami na iOS Safari */
+    touch-action: manipulation;
 }
 
 body {

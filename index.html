@@ -3,10 +3,20 @@
 <head>
     <meta charset="UTF-8" />
     <title>gastro-panel</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
 </head>
 <body>
 <div id="app"></div>
+<!-- Blokada zoom (działa na Chrome Android gdzie meta viewport jest ignorowany) -->
+<script>
+  document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+  document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
+  document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+</script>
 <!-- punkt wejścia Vite -->
 <script type="module" src="/src/main.js"></script>
 </body>
