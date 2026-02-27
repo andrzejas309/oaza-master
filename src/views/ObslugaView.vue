@@ -341,7 +341,7 @@ const filteredMenu = computed(() => {
 
   const selectedItems = (grouped[selectedCategory.value] || [])
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' }))
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
 
   return {
     [selectedCategory.value]: selectedItems,

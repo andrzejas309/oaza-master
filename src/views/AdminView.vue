@@ -468,11 +468,10 @@ const editOrderTotal = computed(() => {
 })
 
 const editFilteredMenu = computed(() => {
-  const items = menu.value
+  return menu.value
     .filter(i => i.category === editOrderCategory.value)
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' }))
-  return items
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
 })
 
 const editAddItem = (item) => {
