@@ -82,6 +82,7 @@ import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
+import { clearRoleCache } from '@/router'
 
 const router = useRouter()
 const orders = ref([])
@@ -116,6 +117,7 @@ onUnmounted(() => {
 
 // ==================== Auth ====================
 const logout = async () => {
+  clearRoleCache()
   await signOut(auth)
   router.replace('/login')
 }

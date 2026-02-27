@@ -69,7 +69,7 @@ const onSubmit = async () => {
     const cred = await signInWithEmailAndPassword(auth, email.value, password.value)
     const user = cred.user
 
-    const role = await getRoleForEmail(user.email).catch((roleError) => {
+    const role = await getRoleForEmail(user.email, user.uid).catch((roleError) => {
       console.error('Role fetch error:', roleError)
       throw new Error('Brak dostępu do roli. Sprawdź reguły Firestore.')
     })

@@ -206,6 +206,7 @@ import { auth } from '@/firebase'
 import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
 import { useExtras, EXTRAS_CATEGORIES } from '@/composables/useExtras'
 import draggable from 'vuedraggable'
+import { clearRoleCache } from '@/router'
 
 const router = useRouter()
 
@@ -261,6 +262,7 @@ onMounted(() => {
 
 // ==================== Auth ====================
 const logout = async () => {
+  clearRoleCache()
   await signOut(auth)
   router.replace('/login')
 }

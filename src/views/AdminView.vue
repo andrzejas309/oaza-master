@@ -402,6 +402,7 @@ import { Bar } from 'vue-chartjs'
 import { useBackfillDate } from '@/composables/useBackfillDate'
 import { useMenu } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
+import { clearRoleCache } from '@/router'
 
 const router = useRouter()
 const orders = ref([])
@@ -589,6 +590,7 @@ onMounted(() => {
 
 // ==================== Auth ====================
 const logout = async () => {
+  clearRoleCache()
   await signOut(auth)
   router.replace('/login')
 }

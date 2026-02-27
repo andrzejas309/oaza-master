@@ -233,7 +233,7 @@ import { useRouter } from 'vue-router'
 import { useMenu } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
 import { useBackfillDate } from '@/composables/useBackfillDate'
-import { getRoleForEmail } from '@/router'
+import { getRoleForEmail, clearRoleCache } from '@/router'
 
 const router = useRouter()
 
@@ -314,7 +314,7 @@ onMounted(() => {
   })
   const currentUser = auth.currentUser
   if (currentUser?.email) {
-    getRoleForEmail(currentUser.email).then(role => {
+    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
       userRole.value = role
     })
   }
@@ -741,6 +741,7 @@ const markAsReady = async (order) => {
 
 // ==================== Auth ====================
 const logout = async () => {
+  clearRoleCache()
   await signOut(auth)
   router.replace('/login')
 }
