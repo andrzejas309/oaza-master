@@ -44,20 +44,20 @@
           >
             <h2 class="category-title category-title--menu">{{ category.label }}</h2>
             <draggable
-              v-if="localMenuLists[category.value]?.length"
               :list="localMenuLists[category.value]"
               item-key="id"
-              handle=".drag-handle"
               ghost-class="drag-ghost"
               drag-class="drag-active"
               tag="ol"
-              class="items-list"
-              @end="onMenuDragEnd(category.value, localMenuLists[category.value])"
+              class="items-list items-list--droppable"
+              :class="{ 'items-list--empty': !localMenuLists[category.value]?.length }"
+              :group="{ name: 'menu' }"
+              @start="(evt) => { draggedFromCategory = category.value; draggedItem = localMenuLists[category.value][evt.oldIndex] }"
+              @end="(evt) => onMenuDragEnd(evt, category.value)"
             >
               <template #item="{ element: item, index }">
-                <li class="item-row">
+                <li class="item-row item-row--draggable">
                   <span class="item-num">{{ index + 1 }}</span>
-                  <span class="drag-handle" title="Zmień kolejność">⠿</span>
                   <span class="item-name">{{ item.name }}</span>
                   <span class="item-price">{{ item.price }} zł</span>
                   <div class="item-actions">
@@ -66,8 +66,10 @@
                   </div>
                 </li>
               </template>
+              <template v-if="!localMenuLists[category.value]?.length" #header>
+                <li class="empty-drop-hint">Przeciągnij tu pozycję z innej kategorii</li>
+              </template>
             </draggable>
-            <p v-else class="empty-category muted">Brak pozycji w tej kategorii</p>
           </section>
         </div>
       </template>
@@ -91,20 +93,20 @@
           >
             <h2 class="category-title category-title--extras">{{ category.label }}</h2>
             <draggable
-              v-if="localExtrasLists[category.value]?.length"
               :list="localExtrasLists[category.value]"
               item-key="id"
-              handle=".drag-handle"
               ghost-class="drag-ghost"
               drag-class="drag-active"
               tag="ol"
-              class="items-list"
-              @end="onExtrasDragEnd(category.value, localExtrasLists[category.value])"
+              class="items-list items-list--droppable"
+              :class="{ 'items-list--empty': !localExtrasLists[category.value]?.length }"
+              :group="{ name: 'extras' }"
+              @start="(evt) => { draggedFromCategory = category.value; draggedItem = localExtrasLists[category.value][evt.oldIndex] }"
+              @end="(evt) => onExtrasDragEnd(evt, category.value)"
             >
               <template #item="{ element: item, index }">
-                <li class="item-row item-row--extras">
+                <li class="item-row item-row--extras item-row--draggable">
                   <span class="item-num item-num--extras">{{ index + 1 }}</span>
-                  <span class="drag-handle drag-handle--extras" title="Zmień kolejność">⠿</span>
                   <span class="item-name">{{ item.name }}</span>
                   <span class="item-price item-price--extras">
                     {{ item.price > 0 ? `+${item.price} zł` : 'bezpłatny' }}
@@ -115,8 +117,10 @@
                   </div>
                 </li>
               </template>
+              <template v-if="!localExtrasLists[category.value]?.length" #header>
+                <li class="empty-drop-hint empty-drop-hint--extras">Przeciągnij tu extras z innej kategorii</li>
+              </template>
             </draggable>
-            <p v-else class="empty-category muted">Brak extras w tej kategorii</p>
           </section>
         </div>
       </template>
@@ -195,7 +199,7 @@
  * AI: Vue component should contain only presentation logic.
  * Move business logic to composables.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/firebase'
@@ -217,25 +221,28 @@ const {
   fetchExtras, addExtra, updateExtra, deleteExtra, reorderExtras
 } = useExtras()
 
-// Lokalne kopie list per kategoria (wymagane przez draggable)
-const localMenuLists = computed(() => {
-  const result = {}
-  MENU_CATEGORIES.forEach(cat => {
-    result[cat.value] = (menuByCategory.value[cat.value] ?? []).slice()
-  })
-  return result
-})
+// Lokalne kopie list per kategoria — reactive (draggable mutuje je bezpośrednio)
+const localMenuLists = reactive({})
+const localExtrasLists = reactive({})
 
-const localExtrasLists = computed(() => {
-  const result = {}
-  EXTRAS_CATEGORIES.forEach(cat => {
-    result[cat.value] = (extrasByCategory.value[cat.value] ?? []).slice()
+// Synchronizacja z Firestore gdy dane się zmienią (po fetch)
+watch(() => menuByCategory.value, (byCategory) => {
+  MENU_CATEGORIES.forEach(cat => {
+    localMenuLists[cat.value] = (byCategory[cat.value] ?? []).slice()
   })
-  return result
-})
+}, { immediate: true, deep: true })
+
+watch(() => extrasByCategory.value, (byCategory) => {
+  EXTRAS_CATEGORIES.forEach(cat => {
+    localExtrasLists[cat.value] = (byCategory[cat.value] ?? []).slice()
+  })
+}, { immediate: true, deep: true })
 
 // Flaga zapisu kolejności
 const reordering = ref(false)
+// Śledzenie przeciąganego elementu i jego oryginalnej kategorii (zwykłe let, nie reactive)
+let draggedItem = null
+let draggedFromCategory = null
 
 const activeTab = ref('menu')
 const dialogOpen = ref(false)
@@ -282,22 +289,61 @@ const closeDialog = () => {
 }
 
 // ==================== Drag & Drop ====================
-const onMenuDragEnd = async (categoryValue, newList) => {
+const onMenuDragEnd = async (evt, targetCategory) => {
   if (reordering.value) return
   reordering.value = true
   try {
-    await reorderMenuItems(newList)
+    const crossCategory = draggedFromCategory !== targetCategory
+
+    if (crossCategory && draggedItem) {
+      // Element trafił do innej kategorii — zaktualizuj category w Firestore
+      await updateMenuItem(draggedItem.id, {
+        name: draggedItem.name,
+        price: draggedItem.price,
+        category: targetCategory,
+      })
+      // Zapisz kolejność w kategorii docelowej (lista już zmutowana przez draggable)
+      await reorderMenuItems(localMenuLists[targetCategory])
+      // Zapisz kolejność w kategorii źródłowej (element usunięty)
+      if (localMenuLists[draggedFromCategory]?.length) {
+        await reorderMenuItems(localMenuLists[draggedFromCategory])
+      }
+      // Odśwież by zsynchronizować stan z Firestore
+      await fetchMenu()
+    } else {
+      // Reorder w tej samej kategorii
+      await reorderMenuItems(localMenuLists[targetCategory])
+    }
   } finally {
+    draggedItem = null
+    draggedFromCategory = null
     reordering.value = false
   }
 }
 
-const onExtrasDragEnd = async (categoryValue, newList) => {
+const onExtrasDragEnd = async (evt, targetCategory) => {
   if (reordering.value) return
   reordering.value = true
   try {
-    await reorderExtras(newList)
+    const crossCategory = draggedFromCategory !== targetCategory
+
+    if (crossCategory && draggedItem) {
+      await updateExtra(draggedItem.id, {
+        name: draggedItem.name,
+        price: draggedItem.price,
+        category: targetCategory,
+      })
+      await reorderExtras(localExtrasLists[targetCategory])
+      if (localExtrasLists[draggedFromCategory]?.length) {
+        await reorderExtras(localExtrasLists[draggedFromCategory])
+      }
+      await fetchExtras()
+    } else {
+      await reorderExtras(localExtrasLists[targetCategory])
+    }
   } finally {
+    draggedItem = null
+    draggedFromCategory = null
     reordering.value = false
   }
 }
@@ -492,20 +538,12 @@ const executeDelete = async () => {
 }
 .item-num--extras { background: #7c3aed; }
 
-/* Uchwyt drag */
-.drag-handle {
-  font-size: 1.1rem;
-  color: #d1d5db;
+/* Uchwyt drag – cały wiersz */
+.item-row--draggable {
   cursor: grab;
-  flex-shrink: 0;
   user-select: none;
-  line-height: 1;
-  transition: color 0.12s;
-  padding: 0 0.1rem;
 }
-.drag-handle:hover { color: var(--orange); }
-.drag-handle--extras:hover { color: #7c3aed; }
-.drag-handle:active { cursor: grabbing; }
+.item-row--draggable:active { cursor: grabbing; }
 
 /* Nazwa */
 .item-name {
@@ -554,6 +592,31 @@ const executeDelete = async () => {
 .btn-icon--delete:hover { background: #fee2e2; border-color: #ef4444; }
 
 /* ===================== DRAG & DROP ===================== */
+.items-list--droppable {
+  min-height: 2.8rem;
+}
+
+.items-list--empty {
+  border: 2px dashed var(--border-subtle);
+  border-radius: 0.55rem;
+  min-height: 3.5rem;
+}
+
+.empty-drop-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  list-style: none;
+}
+
+.empty-drop-hint--extras {
+  color: #a78bfa;
+}
+
 .drag-ghost {
   opacity: 0.35;
   background: var(--orange-soft) !important;
