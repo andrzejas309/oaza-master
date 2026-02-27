@@ -26,6 +26,34 @@
         </button>
       </section>
 
+      <!-- Backfill date -->
+      <section class="backfill-section">
+        <div class="backfill-row">
+          <div class="backfill-info">
+            <span class="backfill-icon">📅</span>
+            <div>
+              <div class="backfill-title">Wprowadzanie dla innego dnia</div>
+              <div class="backfill-desc">
+                <template v-if="backfillActive">
+                  Zamówienia w panelu obsługi będą zapisywane jako: <strong>{{ backfillLabel }}</strong>
+                </template>
+                <template v-else>
+                  Aktualnie zamówienia zapisywane są z dzisiejszą datą
+                </template>
+              </div>
+            </div>
+          </div>
+          <div class="backfill-actions">
+            <button v-if="backfillActive" class="btn-backfill-clear" @click="clearBackfill">
+              ✖ Dezaktywuj
+            </button>
+            <button class="btn-backfill-set" @click="openBackfillPicker">
+              {{ backfillActive ? '✏️ Zmień datę' : '📅 Ustaw datę' }}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- Metryki + TOP pozycje -->
       <div class="admin-top-grid">
 
@@ -176,6 +204,36 @@
       </div>
     </div>
 
+    <!-- ===== DIALOG: Picker daty backfill ===== -->
+    <div v-if="showBackfillPicker" class="dialog-backdrop" @click.self="showBackfillPicker = false">
+      <div class="dialog-panel" style="max-width: 420px;">
+        <div class="dialog-panel-header">
+          <h2 class="dialog-panel-title">📅 Ustaw datę wprowadzania</h2>
+          <button class="dialog-close-btn" @click="showBackfillPicker = false">✖</button>
+        </div>
+        <div class="dialog-panel-body" style="padding: 1.5rem;">
+          <p style="color: var(--muted); font-size: 0.9rem; margin: 0 0 1.25rem;">
+            Zamówienia wprowadzone w panelu obsługi będą zapisane z wybraną datą (z aktualną godziną).
+          </p>
+          <div class="form-group">
+            <label class="form-label">Wybierz datę</label>
+            <input
+              v-model="tempBackfillDate"
+              type="date"
+              class="form-input"
+              :max="maxBackfillDate"
+            />
+          </div>
+          <div class="form-actions" style="margin-top: 1.25rem;">
+            <button class="btn-secondary-form" @click="showBackfillPicker = false">Anuluj</button>
+            <button class="btn-primary" :disabled="!tempBackfillDate" @click="confirmBackfill">
+              ✅ Potwierdź
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -193,12 +251,32 @@ import { useRouter } from 'vue-router'
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
 import { Bar } from 'vue-chartjs'
+import { useBackfillDate } from '@/composables/useBackfillDate'
 
 const router = useRouter()
 const orders = ref([])
 const filter = ref({ mode: 'day', date: null, month: null, year: null })
 const showAllItemsDialog = ref(false)
 const showHistoryDialog = ref(false)
+const showBackfillPicker = ref(false)
+
+const { backfillDate, isActive: backfillActive, label: backfillLabel, setDate: setBackfillDate, clear: clearBackfill } = useBackfillDate()
+
+const tempBackfillDate = ref('')
+
+const openBackfillPicker = () => {
+  tempBackfillDate.value = backfillDate.value || new Date().toISOString().slice(0, 10)
+  showBackfillPicker.value = true
+}
+
+const confirmBackfill = () => {
+  if (tempBackfillDate.value) {
+    setBackfillDate(tempBackfillDate.value)
+  }
+  showBackfillPicker.value = false
+}
+
+const maxBackfillDate = new Date().toISOString().slice(0, 10)
 
 
 // ==================== Lifecycle ====================
@@ -624,4 +702,89 @@ const formatQuantity = (qty) => {
 .muted {
   color: var(--muted);
 }
+
+/* ===================== BACKFILL DATE ===================== */
+.backfill-section {
+  margin-top: 1rem;
+}
+
+.backfill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #fff;
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  flex-wrap: wrap;
+}
+
+.backfill-row.active {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.backfill-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.backfill-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.backfill-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.backfill-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.backfill-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.btn-backfill-set {
+  background: #f59e0b;
+  color: #fff;
+  border: none;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.btn-backfill-set:hover { filter: brightness(1.08); }
+
+.btn-backfill-clear {
+  background: #fff;
+  color: #dc2626;
+  border: 2px solid #dc2626;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-backfill-clear:hover { background: #fee2e2; }
 </style>

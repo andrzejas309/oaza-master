@@ -13,6 +13,12 @@
       </nav>
     </header>
 
+    <!-- PASEK BACKFILL -->
+    <div v-if="backfillActive" class="backfill-banner">
+      <span class="backfill-banner-icon">⚠️</span>
+      <span>Uwaga — zamówienia są wprowadzane dla dnia: <strong>{{ backfillLabel }}</strong></span>
+    </div>
+
     <main class="obsluga-layout">
       <!-- PASEK AKCJI -->
       <div class="actions-bar">
@@ -221,10 +227,12 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useMenu } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
+import { useBackfillDate } from '@/composables/useBackfillDate'
 import { getRoleForEmail } from '@/router/index'
 
 const router = useRouter()
@@ -235,6 +243,9 @@ const menu = computed(() => menuItems.value)
 
 // ==================== Extras from Firestore ====================
 const { extrasPriceMap, extrasForCategory, fetchExtras } = useExtras()
+
+// ==================== Backfill Date ====================
+const { isActive: backfillActive, label: backfillLabel, getEffectiveDate } = useBackfillDate()
 
 // ==================== Constants ====================
 const MAX_ORDERS_DISPLAY = 8
@@ -702,14 +713,16 @@ const saveOrder = async () => {
       edited: true,
     })
   } else {
-    // Nowe zamówienie
+    // Nowe zamówienie — użyj daty backfill jeśli aktywna
+    const effectiveDate = getEffectiveDate()
     await addDoc(collection(db, 'orders'), {
       number: Date.now(),
       items: orderItems.value,
       containers: containerCount.value,
       type: selectedOrderType.value,
       status: 'w_toku',
-      createdAt: serverTimestamp(),
+      createdAt: effectiveDate ? Timestamp.fromDate(effectiveDate) : serverTimestamp(),
+      ...(effectiveDate ? { backfilled: true } : {}),
     })
   }
 
@@ -756,6 +769,26 @@ const logout = async () => {
   font-family: 'Inter', system-ui, sans-serif;
   color: var(--text);
 }
+
+/* ===================== BACKFILL BANNER ===================== */
+.backfill-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #dc2626;
+  color: #fff;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.01em;
+  position: sticky;
+  top: 3.5rem;
+  z-index: 99;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35);
+}
+.backfill-banner-icon { font-size: 1.1rem; }
 
 /* ===================== HEADER ===================== */
 .obsluga-header {
