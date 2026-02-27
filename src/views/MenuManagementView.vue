@@ -306,6 +306,8 @@ const onExtrasDragEnd = async (categoryValue, newList) => {
 const saveItem = async () => {
   if (!formData.value.name || formData.value.price === '' || !formData.value.category) return
   saving.value = true
+  // Normalizuj nazwę do małych liter
+  formData.value.name = formData.value.name.trim().toLowerCase()
   try {
     if (dialogMode.value === 'menu') {
       editMode.value
