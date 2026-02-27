@@ -233,7 +233,7 @@ import { useRouter } from 'vue-router'
 import { useMenu } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
 import { useBackfillDate } from '@/composables/useBackfillDate'
-import { getRoleForEmail } from '@/router/index'
+import { getRoleForEmail } from '@/router'
 
 const router = useRouter()
 
@@ -1329,11 +1329,6 @@ button[disabled] {
   font-weight: 500;
   white-space: nowrap;
 }
-
-/* ===================== ANIMACJE ===================== */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s, transform 0.25s; }
-.fade-enter-from { opacity: 0; transform: translateY(-6px); }
-.fade-leave-to   { opacity: 0; transform: translateY(6px); }
 
 /* ===================== RWD ===================== */
 @media (max-width: 768px) {
