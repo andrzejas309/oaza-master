@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { db } from '@/firebase'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore'
 
 const menuItems = ref([])
 const loading = ref(false)
@@ -33,8 +33,8 @@ export function useMenu() {
         ...doc.data()
       }))
 
-      // Sortowanie po stronie klienta (alfabetycznie po nazwie)
-      menuItems.value.sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+      // Sortowanie po polu order (z fallbackiem na Infinity dla starych pozycji)
+      menuItems.value.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
     } catch (err) {
       error.value = err.message
       console.error('Błąd podczas pobierania menu:', err)
@@ -106,18 +106,29 @@ export function useMenu() {
     }
   }
 
-  // Menu pogrupowane po kategoriach (z sortowaniem alfabetycznym)
+  // Menu pogrupowane po kategoriach (sortowanie po polu order)
   const menuByCategory = computed(() => {
     const grouped = {}
-
     MENU_CATEGORIES.forEach(cat => {
       const items = menuItems.value.filter(item => item.category === cat.value)
-      // Sortuj alfabetycznie po nazwie w każdej kategorii
-      grouped[cat.value] = items.sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+      grouped[cat.value] = items.slice().sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
     })
-
     return grouped
   })
+
+  // Zapisz nową kolejność pozycji w danej kategorii (batch update)
+  const reorderMenuItems = async (orderedItems) => {
+    const batch = writeBatch(db)
+    orderedItems.forEach((item, index) => {
+      batch.update(doc(db, 'menu', item.id), { order: index })
+    })
+    await batch.commit()
+    // Zaktualizuj lokalnie bez refetcha
+    orderedItems.forEach((item, index) => {
+      const found = menuItems.value.find(m => m.id === item.id)
+      if (found) found.order = index
+    })
+  }
 
   return {
     menuItems,
@@ -127,7 +138,8 @@ export function useMenu() {
     fetchMenu,
     addMenuItem,
     updateMenuItem,
-    deleteMenuItem
+    deleteMenuItem,
+    reorderMenuItems
   }
 }
 

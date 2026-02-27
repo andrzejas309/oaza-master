@@ -224,6 +224,7 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useMenu } from '@/composables/useMenu'
+import { useExtras } from '@/composables/useExtras'
 import { getRoleForEmail } from '@/router/index'
 
 const router = useRouter()
@@ -231,6 +232,9 @@ const router = useRouter()
 // ==================== Menu from Firestore ====================
 const { menuItems, fetchMenu } = useMenu()
 const menu = computed(() => menuItems.value)
+
+// ==================== Extras from Firestore ====================
+const { extrasPriceMap, extrasForCategory, fetchExtras } = useExtras()
 
 // ==================== Constants ====================
 const MAX_ORDERS_DISPLAY = 8
@@ -247,44 +251,8 @@ const PORTIONS_HALF = [
   { label: 'Pół', value: 0.5 },
 ]
 
-const EXTRAS = [
-  { name: 'jajko', price: 3 },
-  { name: 'pieczarki', price: 3 },
-  { name: 'cebula', price: 3 },
-  { name: 'ser', price: 3 },
-  { name: 'porcja uszek', price: 6 },
-  { name: 'porcja makaronu', price: 3 },
-  { name: 'porcja ryżu', price: 3 },
-  { name: 'bez kiełbasy', price: 0 },
-  { name: 'bez sosu', price: 0 },
-  { name: 'bez sera', price: 0 },
-  { name: 'bez ananasa', price: 0 },
-  { name: 'w panierce z mąki', price: 0 },
-  { name: 'pieczywo', price: 1 },
-  { name: 'bez ziela', price: 0 },
-]
-
-const EXTRAS_FOR_SIDES = [
-  { name: 'z sosem', price: 0 },
-  { name: 'ubite', price: 0 },
-  { name: 'bez ziela', price: 0 },
-]
-
-const EXTRAS_FOR_MAIN = EXTRAS.filter(
-  (e) => e.name !== 'porcja uszek' && e.name !== 'porcja makaronu' && e.name !== 'bez kiełbasy',
-)
-
-const EXTRAS_FOR_SOUPS = EXTRAS.filter(
-  (e) => ['porcja uszek', 'porcja makaronu', 'porcja ryżu', 'bez kiełbasy', 'pieczywo', 'bez ziela'].includes(e.name),
-)
-
-const EXTRAS_PRICE = EXTRAS.reduce((map, e) => {
-  map[e.name] = e.price
-  return map
-}, {})
 
 const portionExcluded = [
-  'rosół',
   'barszcz czerwony',
   'chłodnik',
   'flaczki',
@@ -316,7 +284,7 @@ const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
 const extrasDialogItemKey = ref(null) // Klucz edytowanej pozycji
 const extrasSelected = ref([])
-const extrasOptions = ref(EXTRAS)
+const extrasOptions = ref([])
 
 // Dialog gramatury dla wątróbki
 const gramDialogOpen = ref(false)
@@ -328,6 +296,7 @@ let unsub = null
 // ==================== Lifecycle ====================
 onMounted(() => {
   fetchMenu()
+  fetchExtras()
   unsub = onSnapshot(collection(db, 'orders'), (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     activeOrders.value = all.filter((o) => o.status === 'w_toku')
@@ -379,7 +348,7 @@ const orderItems = computed(() =>
       const basePrice = found?.price || 0
 
       const extrasPrice = (data.extras || []).reduce(
-        (sum, extraName) => sum + (EXTRAS_PRICE[extraName] || 0),
+        (sum, extraName) => sum + (extrasPriceMap.value[extraName] || 0),
         0,
       )
 
@@ -612,16 +581,8 @@ const startEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return
 
-  const categoryExtras = {
-    'dania główne': EXTRAS_FOR_MAIN,
-    'danie dnia': EXTRAS_FOR_MAIN,
-    'zupy': EXTRAS_FOR_SOUPS,
-    'zupa dnia': EXTRAS_FOR_SOUPS,
-    'dodatki': EXTRAS_FOR_SIDES
-  }
-
-  const extras = categoryExtras[base.category]
-  if (!extras) return
+  const extras = extrasForCategory(base.category)
+  if (!extras || !extras.length) return
 
   extrasOptions.value = extras
   extrasDialogItem.value = base

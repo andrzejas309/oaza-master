@@ -24,6 +24,17 @@
         </button>
       </div>
 
+      <!-- Seed extras -->
+      <div class="flex flex-col gap-2" style="margin-bottom: 1.5rem;">
+        <button class="btn btn-extras" @click="seedExtras" :disabled="seedingExtras">
+          {{ seedingExtras ? 'Dodawanie extras...' : '🧂 Wgraj domyślne Extras do bazy' }}
+        </button>
+        <p style="font-size: 0.82rem; color: #6b7280; margin-top: 0.25rem;">
+          Wgrywa jajko, ser, pieczarki itp. do kolekcji <code>extras</code> w Firestore.
+          Bezpieczne – pomija istniejące.
+        </p>
+      </div>
+
       <button class="btn-outline" @click="goToLogin">← Wróć do logowania</button>
 
       <pre
@@ -45,6 +56,7 @@ import { auth, db } from '../firebase'
 import {
   collection,
   addDoc,
+  getDocs,
   setDoc,
   doc,
   serverTimestamp
@@ -55,6 +67,68 @@ const router = useRouter()
 const log = ref('')
 const seedingUsers = ref(false)
 const seedingOrders = ref(false)
+const seedingExtras = ref(false)
+
+const DEFAULT_EXTRAS = [
+  // Dania główne
+  { name: 'jajko',            price: 3, category: 'main' },
+  { name: 'pieczarki',        price: 3, category: 'main' },
+  { name: 'cebula',           price: 3, category: 'main' },
+  { name: 'ser',              price: 3, category: 'main' },
+  { name: 'porcja ryżu',      price: 3, category: 'main' },
+  { name: 'bez sosu',         price: 0, category: 'main' },
+  { name: 'bez sera',         price: 0, category: 'main' },
+  { name: 'bez ananasa',      price: 0, category: 'main' },
+  { name: 'w panierce z mąki',price: 0, category: 'main' },
+  { name: 'pieczywo',         price: 1, category: 'main' },
+  { name: 'bez ziela',        price: 0, category: 'main' },
+  // Zupy
+  { name: 'porcja uszek',     price: 6, category: 'soups' },
+  { name: 'porcja makaronu',  price: 3, category: 'soups' },
+  { name: 'porcja ryżu',      price: 3, category: 'soups' },
+  { name: 'bez kiełbasy',     price: 0, category: 'soups' },
+  { name: 'pieczywo',         price: 1, category: 'soups' },
+  { name: 'bez ziela',        price: 0, category: 'soups' },
+  // Dodatki / surówki
+  { name: 'z sosem',          price: 0, category: 'sides' },
+  { name: 'ubite',            price: 0, category: 'sides' },
+  { name: 'bez ziela',        price: 0, category: 'sides' },
+]
+
+const seedExtras = async () => {
+  log.value = ''
+  seedingExtras.value = true
+  try {
+    if (!auth.currentUser) {
+      log.value += '❌ Musisz być zalogowany jako admin, żeby wgrać extras.\n'
+      log.value += 'Kliknij najpierw "Utwórz konta testowe" lub zaloguj się jako admin@example.com.\n'
+      return
+    }
+
+    const snapshot = await getDocs(collection(db, 'extras'))
+    const existing = new Set(
+      snapshot.docs.map(d => `${d.data().name}__${d.data().category}`)
+    )
+
+    let added = 0, skipped = 0
+    for (const extra of DEFAULT_EXTRAS) {
+      const key = `${extra.name}__${extra.category}`
+      if (existing.has(key)) {
+        log.value += `⏭️ Pominięto (już istnieje): ${extra.name} [${extra.category}]\n`
+        skipped++
+      } else {
+        await addDoc(collection(db, 'extras'), extra)
+        log.value += `✅ Dodano: ${extra.name} [${extra.category}]\n`
+        added++
+      }
+    }
+    log.value += `\nGotowe! Dodano: ${added}, pominięto: ${skipped}\n`
+  } catch (e) {
+    log.value += `❌ Błąd: ${e.message}\n`
+  } finally {
+    seedingExtras.value = false
+  }
+}
 
 // zdefiniuj użytkowników + role
 const users = [
@@ -204,5 +278,9 @@ const goToLogin = () => {
   background: #ffffff;
   color: #111827;
   border: 1px solid #d1d5db;
+}
+.btn-extras {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  color: #ffffff;
 }
 </style>

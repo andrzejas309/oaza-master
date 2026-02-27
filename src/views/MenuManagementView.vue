@@ -1,112 +1,162 @@
 <template>
-  <div class="view-container">
-    <header class="flex flex-row" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h1 style="font-size: 1.75rem; font-weight: 800;">Zarządzanie Menu</h1>
-      <div class="flex flex-row" style="gap: 0.5rem; align-items: center;">
-        <button class="btn-outline btn-sm" @click="router.push('/admin')">Panel admina</button>
-        <button class="btn-outline btn-sm" @click="logout">Wyloguj</button>
+  <div class="menu-mgmt-root">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="header-icon">🍴</span>
+        <h1 class="header-title">Zarządzanie Menu</h1>
       </div>
+      <nav class="header-nav">
+        <button class="btn-nav" @click="router.push('/admin')">Panel admina</button>
+        <button class="btn-nav btn-nav--logout" @click="logout">Wyloguj</button>
+      </nav>
     </header>
 
-    <!-- Przycisk dodawania -->
-    <section style="margin-bottom: 1rem;">
-      <button class="btn-add" @click="openAddDialog">
-        ➕ Dodaj nową pozycję
-      </button>
-    </section>
+    <main class="menu-mgmt-layout">
 
-    <!-- Loader -->
-    <div v-if="loading && !menuItems.length" class="loader">
-      Ładowanie menu...
-    </div>
-
-    <!-- Error -->
-    <div v-if="error" class="error-message">
-      ❌ Błąd: {{ error }}
-    </div>
-
-    <!-- Menu pogrupowane po kategoriach -->
-    <section v-for="category in MENU_CATEGORIES" :key="category.value" class="card category-section">
-      <h2 class="category-title">{{ category.label }}</h2>
-
-      <div v-if="menuByCategory[category.value]?.length" class="menu-items-grid">
-        <div
-          v-for="item in menuByCategory[category.value]"
-          :key="item.id"
-          class="menu-item-card"
-        >
-          <div class="item-info">
-            <h3 class="item-name">{{ item.name }}</h3>
-            <p class="item-price">{{ item.price }} zł</p>
-          </div>
-          <div class="item-actions">
-            <button class="btn-icon btn-edit" @click="openEditDialog(item)" title="Edytuj">
-              ✏️
-            </button>
-            <button class="btn-icon btn-delete" @click="confirmDelete(item)" title="Usuń">
-              🗑️
-            </button>
-          </div>
-        </div>
+      <!-- ZAKŁADKI -->
+      <div class="tabs-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'menu' }" @click="activeTab = 'menu'">
+          🍽️ Menu
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'extras' }" @click="activeTab = 'extras'">
+          🧂 Dodatki (Extras)
+        </button>
       </div>
 
-      <p v-else class="empty-category">
-        Brak pozycji w tej kategorii
-      </p>
-    </section>
+      <!-- ==================== ZAKŁADKA: MENU ==================== -->
+      <template v-if="activeTab === 'menu'">
+        <div class="actions-bar">
+          <button class="btn-add-item btn-add-item--menu" @click="openAddDialog('menu')">
+            ➕ Dodaj nową pozycję
+          </button>
+        </div>
 
-    <!-- Dialog dodawania/edycji -->
+        <div v-if="menuLoading && !menuItems.length" class="state-info muted">Ładowanie menu…</div>
+        <div v-if="menuError" class="state-error">❌ Błąd: {{ menuError }}</div>
+
+        <div class="categories-grid">
+          <section
+            v-for="category in MENU_CATEGORIES"
+            :key="category.value"
+            class="card category-section"
+          >
+            <h2 class="category-title category-title--menu">{{ category.label }}</h2>
+            <draggable
+              v-if="localMenuLists[category.value]?.length"
+              :list="localMenuLists[category.value]"
+              item-key="id"
+              handle=".drag-handle"
+              ghost-class="drag-ghost"
+              drag-class="drag-active"
+              tag="ol"
+              class="items-list"
+              @end="onMenuDragEnd(category.value, localMenuLists[category.value])"
+            >
+              <template #item="{ element: item, index }">
+                <li class="item-row">
+                  <span class="item-num">{{ index + 1 }}</span>
+                  <span class="drag-handle" title="Zmień kolejność">⠿</span>
+                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-price">{{ item.price }} zł</span>
+                  <div class="item-actions">
+                    <button class="btn-icon btn-icon--edit" @click="openEditDialog('menu', item)" title="Edytuj">✏️</button>
+                    <button class="btn-icon btn-icon--delete" @click="confirmDelete('menu', item)" title="Usuń">🗑️</button>
+                  </div>
+                </li>
+              </template>
+            </draggable>
+            <p v-else class="empty-category muted">Brak pozycji w tej kategorii</p>
+          </section>
+        </div>
+      </template>
+
+      <!-- ==================== ZAKŁADKA: EXTRAS ==================== -->
+      <template v-if="activeTab === 'extras'">
+        <div class="actions-bar">
+          <button class="btn-add-item btn-add-item--extras" @click="openAddDialog('extras')">
+            ➕ Dodaj nowy extras
+          </button>
+        </div>
+
+        <div v-if="extrasLoading && !extrasItems.length" class="state-info muted">Ładowanie extras…</div>
+        <div v-if="extrasError" class="state-error">❌ Błąd: {{ extrasError }}</div>
+
+        <div class="categories-grid">
+          <section
+            v-for="category in EXTRAS_CATEGORIES"
+            :key="category.value"
+            class="card category-section"
+          >
+            <h2 class="category-title category-title--extras">{{ category.label }}</h2>
+            <draggable
+              v-if="localExtrasLists[category.value]?.length"
+              :list="localExtrasLists[category.value]"
+              item-key="id"
+              handle=".drag-handle"
+              ghost-class="drag-ghost"
+              drag-class="drag-active"
+              tag="ol"
+              class="items-list"
+              @end="onExtrasDragEnd(category.value, localExtrasLists[category.value])"
+            >
+              <template #item="{ element: item, index }">
+                <li class="item-row item-row--extras">
+                  <span class="item-num item-num--extras">{{ index + 1 }}</span>
+                  <span class="drag-handle drag-handle--extras" title="Zmień kolejność">⠿</span>
+                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-price item-price--extras">
+                    {{ item.price > 0 ? `+${item.price} zł` : 'bezpłatny' }}
+                  </span>
+                  <div class="item-actions">
+                    <button class="btn-icon btn-icon--edit" @click="openEditDialog('extras', item)" title="Edytuj">✏️</button>
+                    <button class="btn-icon btn-icon--delete" @click="confirmDelete('extras', item)" title="Usuń">🗑️</button>
+                  </div>
+                </li>
+              </template>
+            </draggable>
+            <p v-else class="empty-category muted">Brak extras w tej kategorii</p>
+          </section>
+        </div>
+      </template>
+
+    </main>
+
+    <!-- ===== Dialog dodawania/edycji ===== -->
     <div v-if="dialogOpen" class="dialog-backdrop" @click.self="closeDialog">
       <div class="dialog-content">
         <div class="dialog-header">
-          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">
-            {{ editMode ? 'Edytuj pozycję' : 'Dodaj nową pozycję' }}
+          <h2 class="dialog-header-title" :class="dialogMode === 'extras' ? 'dialog-header-title--extras' : ''">
+            {{ editMode ? '✏️ Edytuj' : '➕ Dodaj' }}
+            {{ dialogMode === 'extras' ? 'extras' : 'pozycję' }}
           </h2>
           <button class="dialog-close" @click="closeDialog">✖</button>
         </div>
-
-        <div class="dialog-body" style="padding: 1.5rem;">
+        <div class="dialog-body">
           <form @submit.prevent="saveItem" class="form">
             <div class="form-group">
-              <label class="form-label">Nazwa pozycji</label>
-              <input
-                v-model="formData.name"
-                type="text"
-                class="form-input"
-                placeholder="np. Kotlet schabowy"
-                required
-              />
+              <label class="form-label">Nazwa</label>
+              <input v-model="formData.name" type="text" class="form-input"
+                :placeholder="dialogMode === 'extras' ? 'np. bez sosu' : 'np. Kotlet schabowy'" required />
             </div>
-
             <div class="form-group">
               <label class="form-label">Cena (zł)</label>
-              <input
-                v-model="formData.price"
-                type="number"
-                step="0.01"
-                min="0"
-                class="form-input"
-                placeholder="np. 17"
-                required
-              />
+              <input v-model="formData.price" type="number" step="0.01" min="0" class="form-input" placeholder="0" required />
             </div>
-
             <div class="form-group">
               <label class="form-label">Kategoria</label>
-              <select v-model="formData.category" class="form-select" required>
+              <select v-model="formData.category" class="form-select" :class="dialogMode === 'extras' ? 'form-select--extras' : ''" required>
                 <option value="" disabled>Wybierz kategorię</option>
-                <option v-for="cat in MENU_CATEGORIES" :key="cat.value" :value="cat.value">
+                <option v-for="cat in (dialogMode === 'extras' ? EXTRAS_CATEGORIES : MENU_CATEGORIES)" :key="cat.value" :value="cat.value">
                   {{ cat.label }}
                 </option>
               </select>
             </div>
-
             <div class="form-actions">
-              <button type="button" class="btn-secondary" @click="closeDialog">
-                Anuluj
-              </button>
-              <button type="submit" class="btn-primary" :disabled="saving">
-                {{ saving ? 'Zapisywanie...' : (editMode ? 'Zapisz zmiany' : 'Dodaj pozycję') }}
+              <button type="button" class="btn-secondary-form" @click="closeDialog">Anuluj</button>
+              <button type="submit" class="btn-primary" :class="dialogMode === 'extras' ? 'btn-primary--extras' : ''" :disabled="saving">
+                {{ saving ? 'Zapisywanie…' : (editMode ? 'Zapisz zmiany' : 'Dodaj') }}
               </button>
             </div>
           </form>
@@ -114,31 +164,29 @@
       </div>
     </div>
 
-    <!-- Dialog potwierdzenia usunięcia -->
+    <!-- ===== Dialog potwierdzenia usunięcia ===== -->
     <div v-if="deleteDialog" class="dialog-backdrop" @click.self="deleteDialog = null">
-      <div class="dialog-content" style="max-width: 500px;">
+      <div class="dialog-content" style="max-width: 480px;">
         <div class="dialog-header">
-          <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0;">Potwierdź usunięcie</h2>
+          <h2 class="dialog-header-title">🗑️ Potwierdź usunięcie</h2>
           <button class="dialog-close" @click="deleteDialog = null">✖</button>
         </div>
-
-        <div class="dialog-body" style="padding: 1.5rem;">
-          <p style="margin-bottom: 1.5rem; color: #6b7280;">
-            Czy na pewno chcesz usunąć pozycję:<br/>
-            <strong style="color: #1f2937;">{{ deleteDialog?.name }}</strong> ({{ deleteDialog?.price }} zł)?
+        <div class="dialog-body">
+          <p class="delete-confirm-text">
+            Czy na pewno chcesz usunąć:<br/>
+            <strong>{{ deleteDialog?.item?.name }}</strong>
+            <span class="muted"> ({{ deleteDialog?.item?.price }} zł)</span>?
           </p>
-
           <div class="form-actions">
-            <button type="button" class="btn-secondary" @click="deleteDialog = null">
-              Anuluj
-            </button>
-            <button type="button" class="btn-danger" @click="executeDelete" :disabled="saving">
-              {{ saving ? 'Usuwanie...' : 'Usuń' }}
+            <button type="button" class="btn-secondary-form" @click="deleteDialog = null">Anuluj</button>
+            <button type="button" class="btn-danger-form" @click="executeDelete" :disabled="saving">
+              {{ saving ? 'Usuwanie…' : 'Usuń' }}
             </button>
           </div>
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -147,29 +195,61 @@
  * AI: Vue component should contain only presentation logic.
  * Move business logic to composables.
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/firebase'
 import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
+import { useExtras, EXTRAS_CATEGORIES } from '@/composables/useExtras'
+import draggable from 'vuedraggable'
 
 const router = useRouter()
-const { menuItems, menuByCategory, loading, error, fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem } = useMenu()
 
+const {
+  menuItems, menuByCategory,
+  loading: menuLoading, error: menuError,
+  fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, reorderMenuItems
+} = useMenu()
+
+const {
+  extrasItems, extrasByCategory,
+  loading: extrasLoading, error: extrasError,
+  fetchExtras, addExtra, updateExtra, deleteExtra, reorderExtras
+} = useExtras()
+
+// Lokalne kopie list per kategoria (wymagane przez draggable)
+const localMenuLists = computed(() => {
+  const result = {}
+  MENU_CATEGORIES.forEach(cat => {
+    result[cat.value] = (menuByCategory.value[cat.value] ?? []).slice()
+  })
+  return result
+})
+
+const localExtrasLists = computed(() => {
+  const result = {}
+  EXTRAS_CATEGORIES.forEach(cat => {
+    result[cat.value] = (extrasByCategory.value[cat.value] ?? []).slice()
+  })
+  return result
+})
+
+// Flaga zapisu kolejności
+const reordering = ref(false)
+
+const activeTab = ref('menu')
 const dialogOpen = ref(false)
-const deleteDialog = ref(null)
+const dialogMode = ref('menu')   // 'menu' | 'extras'
+const deleteDialog = ref(null)   // { mode, item }
 const editMode = ref(false)
 const saving = ref(false)
-const formData = ref({
-  name: '',
-  price: '',
-  category: ''
-})
+const formData = ref({ name: '', price: '', category: '' })
 const editingId = ref(null)
 
 // ==================== Lifecycle ====================
 onMounted(() => {
   fetchMenu()
+  fetchExtras()
 })
 
 // ==================== Auth ====================
@@ -179,51 +259,62 @@ const logout = async () => {
 }
 
 // ==================== Dialog Management ====================
-const openAddDialog = () => {
+const openAddDialog = (mode) => {
+  dialogMode.value = mode
   editMode.value = false
   editingId.value = null
-  formData.value = {
-    name: '',
-    price: '',
-    category: ''
-  }
+  formData.value = { name: '', price: mode === 'extras' ? 0 : '', category: '' }
   dialogOpen.value = true
 }
 
-const openEditDialog = (item) => {
+const openEditDialog = (mode, item) => {
+  dialogMode.value = mode
   editMode.value = true
   editingId.value = item.id
-  formData.value = {
-    name: item.name,
-    price: item.price,
-    category: item.category
-  }
+  formData.value = { name: item.name, price: item.price, category: item.category }
   dialogOpen.value = true
 }
 
 const closeDialog = () => {
   dialogOpen.value = false
-  formData.value = {
-    name: '',
-    price: '',
-    category: ''
-  }
+  formData.value = { name: '', price: '', category: '' }
   editingId.value = null
 }
 
-// ==================== CRUD Operations ====================
-const saveItem = async () => {
-  if (!formData.value.name || !formData.value.price || !formData.value.category) {
-    return
-  }
-
-  saving.value = true
-
+// ==================== Drag & Drop ====================
+const onMenuDragEnd = async (categoryValue, newList) => {
+  if (reordering.value) return
+  reordering.value = true
   try {
-    if (editMode.value) {
-      await updateMenuItem(editingId.value, formData.value)
+    await reorderMenuItems(newList)
+  } finally {
+    reordering.value = false
+  }
+}
+
+const onExtrasDragEnd = async (categoryValue, newList) => {
+  if (reordering.value) return
+  reordering.value = true
+  try {
+    await reorderExtras(newList)
+  } finally {
+    reordering.value = false
+  }
+}
+
+// ==================== CRUD ====================
+const saveItem = async () => {
+  if (!formData.value.name || formData.value.price === '' || !formData.value.category) return
+  saving.value = true
+  try {
+    if (dialogMode.value === 'menu') {
+      editMode.value
+        ? await updateMenuItem(editingId.value, formData.value)
+        : await addMenuItem(formData.value)
     } else {
-      await addMenuItem(formData.value)
+      editMode.value
+        ? await updateExtra(editingId.value, formData.value)
+        : await addExtra(formData.value)
     }
     closeDialog()
   } catch (err) {
@@ -233,17 +324,16 @@ const saveItem = async () => {
   }
 }
 
-const confirmDelete = (item) => {
-  deleteDialog.value = item
+const confirmDelete = (mode, item) => {
+  deleteDialog.value = { mode, item }
 }
 
 const executeDelete = async () => {
   if (!deleteDialog.value) return
-
   saving.value = true
-
   try {
-    await deleteMenuItem(deleteDialog.value.id)
+    const { mode, item } = deleteDialog.value
+    mode === 'menu' ? await deleteMenuItem(item.id) : await deleteExtra(item.id)
     deleteDialog.value = null
   } catch (err) {
     alert('Błąd podczas usuwania: ' + err.message)
@@ -254,317 +344,248 @@ const executeDelete = async () => {
 </script>
 
 <style scoped>
+/* ===================== ROOT ===================== */
+.menu-mgmt-root {
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text);
+}
+
+/* ===================== LAYOUT ===================== */
+.menu-mgmt-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 2rem;
+}
+
+/* ===================== ZAKŁADKI ===================== */
+.tabs-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 2px solid var(--border-subtle);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: 0.5rem 0.5rem 0 0;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.tab-btn:hover { background: #f3f4f6; color: var(--text); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--orange); font-weight: 800; }
+
+/* ===================== PASEK AKCJI ===================== */
+.actions-bar {
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.btn-add-item {
+  width: 100%;
+  color: white;
+  padding: 0.9rem 1.5rem;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 1.05rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-add-item--menu {
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+  box-shadow: 0 4px 12px rgba(47, 158, 68, 0.25);
+}
+.btn-add-item--menu:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(47, 158, 68, 0.4); }
+.btn-add-item--extras {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+.btn-add-item--extras:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4); }
+
+/* ===================== STANY ===================== */
+.state-info { text-align: center; padding: 2rem; font-size: 1.05rem; }
+.state-error {
+  background: #fee2e2; color: #dc2626;
+  padding: 1rem 1.25rem; border-radius: 0.75rem;
+  margin-top: 1rem; border: 1px solid #fecaca; font-weight: 600;
+}
+
+/* ===================== SIATKA KATEGORII (2 obok siebie) ===================== */
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .categories-grid { grid-template-columns: 1fr; }
+}
+
+/* ===================== SEKCJA KATEGORII ===================== */
 .category-section {
-  margin-bottom: 1.5rem;
+  /* card z main.css + własny padding */
+  padding: 1rem 1.1rem;
 }
 
 .category-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #ff8a3c;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.45rem;
 }
+.category-title--menu  { border-bottom: 2px solid var(--orange); }
+.category-title--extras { border-bottom: 2px solid #7c3aed; color: #4c1d95; }
 
-.menu-items-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-}
-
-.menu-item-card {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s ease;
-}
-
-.menu-item-card:hover {
-  background: #ffe8d5;
-  border-color: #ff8a3c;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(230, 119, 0, 0.2);
-}
-
-.item-info {
-  flex: 1;
-}
-
-.item-name {
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 0.25rem;
-}
-
-.item-price {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #e67700;
+/* ===================== LISTA POZYCJI ===================== */
+.items-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.55rem;
+  background: #f9fafb;
+  border: 1px solid var(--border-subtle);
+  transition: background 0.12s, border-color 0.12s;
+  min-height: 2.4rem;
+}
+.item-row:hover { background: var(--orange-soft); border-color: #ffd6aa; }
+.item-row--extras:hover { background: #f5f3ff; border-color: #c4b5fd; }
+
+/* Numer porządkowy */
+.item-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--orange-dark);
+  border-radius: 0.3rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.item-num--extras { background: #7c3aed; }
+
+/* Uchwyt drag */
+.drag-handle {
+  font-size: 1.1rem;
+  color: #d1d5db;
+  cursor: grab;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+  transition: color 0.12s;
+  padding: 0 0.1rem;
+}
+.drag-handle:hover { color: var(--orange); }
+.drag-handle--extras:hover { color: #7c3aed; }
+.drag-handle:active { cursor: grabbing; }
+
+/* Nazwa */
+.item-name {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cena */
+.item-price {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--orange-dark);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.item-price--extras { color: #6d28d9; }
+
+/* Akcje */
 .item-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .btn-icon {
   background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  padding: 0.5rem;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 0.4rem;
+  padding: 0;
+  width: 1.8rem;
+  height: 1.8rem;
+  font-size: 0.85rem;
   cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s ease;
-  width: 2.5rem;
-  height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-icon--edit:hover   { background: #dbeafe; border-color: #3b82f6; }
+.btn-icon--delete:hover { background: #fee2e2; border-color: #ef4444; }
+
+/* ===================== DRAG & DROP ===================== */
+.drag-ghost {
+  opacity: 0.35;
+  background: var(--orange-soft) !important;
+  border: 2px dashed var(--orange) !important;
+}
+.item-row--extras.drag-ghost {
+  background: #f5f3ff !important;
+  border-color: #7c3aed !important;
+}
+.drag-active {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
+  transform: scale(1.01) !important;
+  opacity: 0.95;
+  z-index: 10;
 }
 
-.btn-edit:hover {
-  background: #dbeafe;
-  border-color: #3b82f6;
+/* ===================== DIALOG EXTRAS ===================== */
+.dialog-header-title--extras { color: #5b21b6; }
+.form-select--extras:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
+.btn-primary--extras {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  box-shadow: 0 2px 8px rgba(124,58,237,0.2);
 }
+.btn-primary--extras:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(124,58,237,0.35); }
 
-.btn-delete:hover {
-  background: #fee2e2;
-  border-color: #ef4444;
-}
+/* ===================== MISC ===================== */
+.empty-category { font-style: italic; text-align: center; padding: 0.75rem 0; color: var(--muted); font-size: 0.9rem; }
+.delete-confirm-text { color: #374151; line-height: 1.6; margin-bottom: 1.5rem; }
 
-.btn-add {
-  width: 100%;
-  background: linear-gradient(135deg, #2f9e44 0%, #2b8a3e 100%);
-  color: white;
-  padding: 1rem 1.5rem;
-  border: none;
-  border-radius: 1rem;
-  font-weight: 700;
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(47, 158, 68, 0.3);
-}
-
-.btn-add:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(47, 158, 68, 0.4);
-}
-
-.empty-category {
-  color: #9ca3af;
-  font-style: italic;
-  text-align: center;
-  padding: 1rem;
-}
-
-.loader {
-  text-align: center;
-  padding: 2rem;
-  color: #6b7280;
-  font-size: 1.1rem;
-}
-
-.error-message {
-  background: #fee2e2;
-  color: #dc2626;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  margin-bottom: 1rem;
-  border: 1px solid #fecaca;
-}
-
-/* Form styles */
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-label {
-  font-weight: 600;
-  color: #374151;
-  font-size: 0.9rem;
-}
-
-.form-input,
-.form-select {
-  padding: 0.75rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 0.5rem;
-  font-size: 1rem;
-  transition: all 0.2s ease;
-}
-
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: #ff8a3c;
-  box-shadow: 0 0 0 3px rgba(255, 138, 60, 0.1);
-}
-
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #ff8a3c 0%, #e67700 100%);
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(230, 119, 0, 0.3);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: white;
-  color: #6b7280;
-  padding: 0.75rem 1.5rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-secondary:hover {
-  border-color: #d1d5db;
-  background: #f9fafb;
-}
-
-.btn-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-danger:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-
-.btn-danger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Reuse existing dialog styles */
-.btn-outline {
-  background: white;
-  border: 2px solid #ff8a3c;
-  color: #e67700;
-  padding: 0.6rem 1.2rem;
-  border-radius: 9999px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-outline:hover {
-  background: #ff8a3c;
-  color: black;
-}
-
-.btn-sm {
-  font-size: 0.9rem;
-  padding: 0.4rem 0.8rem;
-}
-
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  padding: 1rem;
-}
-
-.dialog-content {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #6b7280;
-  padding: 0.5rem;
-  transition: color 0.2s ease;
-}
-
-.dialog-close:hover {
-  color: #e67700;
-}
-
-.dialog-body {
-  overflow-y: auto;
-}
-
+/* ===================== RESPONSIVE ===================== */
 @media (max-width: 768px) {
-  .menu-items-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-actions {
-    flex-direction: column;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-danger {
-    width: 100%;
-  }
+  .form-actions { flex-direction: column; }
+  .btn-primary, .btn-secondary-form, .btn-danger-form { width: 100%; text-align: center; }
+  .tabs-bar { overflow-x: auto; }
 }
 </style>
 
