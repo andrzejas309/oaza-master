@@ -179,8 +179,15 @@
                       >
                         {{ order.type === 'na_miejscu' ? 'Na miejscu' : 'Na wynos' }}
                       </span>
+                      <span v-if="order.editedAt" class="order-edited-badge" :title="`Edytowano: ${formatOrderTime(order.editedAt?.toDate?.() ?? order.editedAt)}`">
+                        ✏️ edytowano
+                      </span>
                     </div>
-                    <span class="history-order-total">{{ calculateOrderTotal(order).toFixed(2) }} zł</span>
+                    <div class="history-order-right">
+                      <span class="history-order-total">{{ calculateOrderTotal(order).toFixed(2) }} zł</span>
+                      <button class="btn-edit-order" @click.stop="openEditOrderDialog(order)" title="Edytuj zamówienie">✏️</button>
+                      <button class="btn-edit-date" @click.stop="openEditDateDialog(order)" title="Zmień datę zamówienia">📅</button>
+                    </div>
                   </div>
                   <div class="history-order-items">
                     <div v-for="item in order.items" :key="item.name">
@@ -234,6 +241,147 @@
       </div>
     </div>
 
+    <!-- ===== DIALOG: Edycja zamówienia ===== -->
+    <div v-if="editOrderDialog" class="dialog-backdrop" @click.self="editOrderDialog = null">
+      <div class="dialog-panel dialog-panel--wide">
+        <div class="dialog-panel-header">
+          <h2 class="dialog-panel-title">✏️ Edytuj zamówienie #{{ editOrderDialog.order.number }}</h2>
+          <button class="dialog-close-btn" @click="editOrderDialog = null">✖</button>
+        </div>
+        <div class="dialog-panel-body edit-order-body">
+
+          <!-- Typ zamówienia -->
+          <div class="edit-order-type-row">
+            <button
+              class="order-type-pill"
+              :class="{ active: editOrderType === 'na_miejscu' }"
+              @click="editOrderType = 'na_miejscu'"
+            >Na miejscu</button>
+            <button
+              class="order-type-pill"
+              :class="{ active: editOrderType === 'na_wynos' }"
+              @click="editOrderType = 'na_wynos'"
+            >Na wynos</button>
+          </div>
+
+          <div class="edit-order-columns">
+
+            <!-- LEWA: Mini menu -->
+            <div class="edit-order-menu">
+              <div class="edit-cat-pills">
+                <button
+                  v-for="cat in categoryList"
+                  :key="cat"
+                  class="edit-cat-pill"
+                  :class="{ active: editOrderCategory === cat }"
+                  @click="editOrderCategory = cat"
+                >{{ cat }}</button>
+              </div>
+              <div class="edit-menu-list">
+                <div
+                  v-for="item in editFilteredMenu"
+                  :key="item.name"
+                  class="edit-menu-item"
+                  @click="editAddItem(item)"
+                >
+                  <span class="edit-menu-name">{{ item.name }}</span>
+                  <span class="edit-menu-price">{{ item.price }} zł</span>
+                </div>
+                <p v-if="!editFilteredMenu.length" class="edit-menu-empty muted">Brak pozycji</p>
+              </div>
+            </div>
+
+            <!-- PRAWA: Lista zamówienia -->
+            <div class="edit-order-items">
+              <h4 class="edit-order-items-title">🧾 Pozycje zamówienia</h4>
+
+              <div v-if="editOrderItems.length" class="edit-items-list">
+                <div v-for="item in editOrderItems" :key="item.key" class="edit-item-row">
+                  <div class="edit-item-info">
+                    <span class="edit-item-name">{{ item.name }}</span>
+                    <span v-if="item.quantity !== 1" class="edit-item-portion muted"> ({{ item.quantity === 0.5 ? '½' : item.quantity }})</span>
+                    <span v-if="item.extras?.length" class="edit-item-extras muted"> + {{ item.extras.join(', ') }}</span>
+                  </div>
+                  <div class="edit-item-controls">
+                    <span class="edit-item-price">{{ item.finalPrice.toFixed(2) }} zł</span>
+                    <button class="edit-ctrl-btn edit-ctrl-btn--minus" @click="editDecreaseItem(item.key)">−</button>
+                    <span class="edit-ctrl-count">× {{ item.count }}</span>
+                    <button class="edit-ctrl-btn edit-ctrl-btn--plus" @click="editOrderDraft.items[item.key] && editOrderDraft.items[item.key].count++">+</button>
+                    <button class="edit-ctrl-btn edit-ctrl-btn--del" @click="editRemoveItem(item.key)">🗑</button>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted" style="text-align:center; padding: 1rem 0; font-style: italic;">Brak pozycji</p>
+
+              <!-- Pojemniki -->
+              <div class="edit-containers-row">
+                <span>📦 Pojemniki</span>
+                <div class="edit-containers-controls">
+                  <button class="edit-ctrl-btn edit-ctrl-btn--minus" @click="editOrderContainers = Math.max(0, editOrderContainers - 1)">−</button>
+                  <span class="edit-ctrl-count">{{ editOrderContainers }}</span>
+                  <button class="edit-ctrl-btn edit-ctrl-btn--plus" @click="editOrderContainers++">+</button>
+                </div>
+              </div>
+
+              <!-- Suma -->
+              <div class="edit-order-summary">
+                <span>Razem:</span>
+                <strong>{{ editOrderTotal.toFixed(2) }} zł</strong>
+              </div>
+
+              <div class="form-actions" style="margin-top: 0.75rem;">
+                <button class="btn-secondary-form" @click="editOrderDialog = null">Anuluj</button>
+                <button
+                  class="btn-primary"
+                  :disabled="!editOrderItems.length || !editOrderType || editOrderSaving"
+                  @click="confirmEditOrder"
+                >
+                  {{ editOrderSaving ? 'Zapisywanie…' : '✅ Zapisz zmiany' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== DIALOG: Edycja daty zamówienia ===== -->
+    <div v-if="editDateDialog" class="dialog-backdrop" @click.self="editDateDialog = null">
+      <div class="dialog-panel" style="max-width: 420px;">
+        <div class="dialog-panel-header">
+          <h2 class="dialog-panel-title">📅 Zmień datę zamówienia</h2>
+          <button class="dialog-close-btn" @click="editDateDialog = null">✖</button>
+        </div>
+        <div class="dialog-panel-body" style="padding: 1.5rem;">
+          <p style="color: var(--muted); font-size: 0.9rem; margin: 0 0 1.25rem;">
+            Zamówienie <strong>#{{ editDateDialog.order.number }}</strong> —
+            aktualna data: <strong>{{ formatOrderTime(editDateDialog.order.createdAt) }}</strong>
+          </p>
+          <div class="edit-date-fields">
+            <div class="form-group">
+              <label class="form-label">Data</label>
+              <input v-model="editDateValue" type="date" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Godzina</label>
+              <input v-model="editTimeValue" type="time" class="form-input" />
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top: 1.25rem;">
+            <button class="btn-secondary-form" @click="editDateDialog = null">Anuluj</button>
+            <button
+              class="btn-primary"
+              :disabled="!editDateValue || !editTimeValue || editDateSaving"
+              @click="confirmEditDate"
+            >
+              {{ editDateSaving ? 'Zapisywanie…' : '✅ Zapisz' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -244,14 +392,16 @@
  * Move business logic to composables.
  */
 
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebase'
 import { useRouter } from 'vue-router'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, updateDoc, doc, Timestamp } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
 import { Bar } from 'vue-chartjs'
 import { useBackfillDate } from '@/composables/useBackfillDate'
+import { useMenu } from '@/composables/useMenu'
+import { useExtras } from '@/composables/useExtras'
 
 const router = useRouter()
 const orders = ref([])
@@ -259,6 +409,158 @@ const filter = ref({ mode: 'day', date: null, month: null, year: null })
 const showAllItemsDialog = ref(false)
 const showHistoryDialog = ref(false)
 const showBackfillPicker = ref(false)
+
+// ==================== Menu + Extras (do edycji zamówień) ====================
+const { menuItems, fetchMenu } = useMenu()
+const { extrasPriceMap, fetchExtras } = useExtras()
+const menu = computed(() => menuItems.value)
+const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki', 'surówki', 'napoje', 'składniki']
+
+// ==================== Edycja zamówienia (z historii) ====================
+const editOrderDialog = ref(null)        // { order }
+const editOrderDraft = reactive({ items: {} })
+const editOrderType = ref(null)
+const editOrderContainers = ref(0)
+const editOrderCategory = ref('zupy')
+const editOrderSaving = ref(false)
+
+
+const generateItemKey = (name, quantity = 1, extras = []) => {
+  let key = name
+  if (quantity !== 1) key += `|q${quantity}`
+  if (extras?.length) key += `|${[...extras].sort().join(',')}`
+  return key
+}
+
+const openEditOrderDialog = (order) => {
+  // Załaduj pozycje do draftu
+  editOrderDraft.items = {}
+  for (const item of (order.items || [])) {
+    const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
+    editOrderDraft.items[key] = {
+      name: item.name,
+      quantity: item.quantity ?? 1,
+      count: item.count ?? 1,
+      extras: [...(item.extras ?? [])],
+    }
+  }
+  editOrderType.value = order.type ?? null
+  editOrderContainers.value = order.containers ?? 0
+  editOrderCategory.value = 'zupy'
+  editOrderDialog.value = { order }
+}
+
+const editOrderItems = computed(() =>
+  Object.entries(editOrderDraft.items).map(([key, data]) => {
+    const found = menu.value.find(m => m.name === data.name)
+    const basePrice = found?.price ?? 0
+    const extrasPrice = (data.extras ?? []).reduce((s, n) => s + (extrasPriceMap.value[n] ?? 0), 0)
+    const unitPrice = basePrice + extrasPrice
+    const finalPrice = unitPrice * data.quantity * (data.count ?? 1)
+    return { key, name: data.name, quantity: data.quantity, count: data.count ?? 1, extras: data.extras ?? [], finalPrice }
+  })
+)
+
+const editOrderTotal = computed(() => {
+  const itemsTotal = editOrderItems.value.reduce((s, i) => s + i.finalPrice, 0)
+  const containerItem = menu.value.find(m => m.name === 'pojemniki')
+  return itemsTotal + editOrderContainers.value * (containerItem?.price ?? 0)
+})
+
+const editFilteredMenu = computed(() => {
+  const items = menu.value
+    .filter(i => i.category === editOrderCategory.value)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' }))
+  return items
+})
+
+const editAddItem = (item) => {
+  const key = generateItemKey(item.name, 1, [])
+  if (editOrderDraft.items[key]) {
+    editOrderDraft.items[key].count++
+  } else {
+    editOrderDraft.items[key] = { name: item.name, quantity: 1, count: 1, extras: [] }
+  }
+}
+
+const editRemoveItem = (key) => {
+  delete editOrderDraft.items[key]
+}
+
+const editDecreaseItem = (key) => {
+  const entry = editOrderDraft.items[key]
+  if (!entry) return
+  if (entry.count > 1) entry.count--
+  else delete editOrderDraft.items[key]
+}
+
+const confirmEditOrder = async () => {
+  if (!editOrderDialog.value) return
+  editOrderSaving.value = true
+  try {
+    const items = editOrderItems.value.map(i => ({
+      name: i.name,
+      quantity: i.quantity,
+      count: i.count,
+      extras: i.extras,
+      finalPrice: i.finalPrice,
+    }))
+    await updateDoc(doc(db, 'orders', editOrderDialog.value.order.id), {
+      items,
+      type: editOrderType.value,
+      containers: editOrderContainers.value,
+      editedAt: Timestamp.now(),
+    })
+    // Zaktualizuj lokalnie
+    const found = orders.value.find(o => o.id === editOrderDialog.value.order.id)
+    if (found) {
+      found.items = items
+      found.type = editOrderType.value
+      found.containers = editOrderContainers.value
+      found.editedAt = new Date()
+    }
+    editOrderDialog.value = null
+  } catch (err) {
+    alert('Błąd podczas zapisu: ' + err.message)
+  } finally {
+    editOrderSaving.value = false
+  }
+}
+
+// Edycja daty zamówienia
+const editDateDialog = ref(null)   // { order }
+const editDateValue = ref('')       // 'YYYY-MM-DD'
+const editTimeValue = ref('')       // 'HH:MM'
+const editDateSaving = ref(false)
+
+const openEditDateDialog = (order) => {
+  const d = order.createdAt
+  editDateValue.value = d.toISOString().slice(0, 10)
+  editTimeValue.value = d.toTimeString().slice(0, 5)
+  editDateDialog.value = { order }
+}
+
+const confirmEditDate = async () => {
+  if (!editDateDialog.value || !editDateValue.value || !editTimeValue.value) return
+  editDateSaving.value = true
+  try {
+    const [y, m, day] = editDateValue.value.split('-').map(Number)
+    const [h, min] = editTimeValue.value.split(':').map(Number)
+    const newDate = new Date(y, m - 1, day, h, min, 0)
+    await updateDoc(doc(db, 'orders', editDateDialog.value.order.id), {
+      createdAt: Timestamp.fromDate(newDate)
+    })
+    // Zaktualizuj lokalnie bez pełnego refetcha
+    const found = orders.value.find(o => o.id === editDateDialog.value.order.id)
+    if (found) found.createdAt = newDate
+    editDateDialog.value = null
+  } catch (err) {
+    alert('Błąd podczas zapisu: ' + err.message)
+  } finally {
+    editDateSaving.value = false
+  }
+}
 
 const { backfillDate, isActive: backfillActive, label: backfillLabel, setDate: setBackfillDate, clear: clearBackfill } = useBackfillDate()
 
@@ -282,6 +584,8 @@ const maxBackfillDate = new Date().toISOString().slice(0, 10)
 // ==================== Lifecycle ====================
 onMounted(() => {
   fetchData()
+  fetchMenu()
+  fetchExtras()
 })
 
 // ==================== Auth ====================
@@ -787,4 +1091,240 @@ const formatQuantity = (qty) => {
   transition: background 0.15s, color 0.15s;
 }
 .btn-backfill-clear:hover { background: #fee2e2; }
+
+/* ===================== EDYCJA ZAMÓWIENIA ===================== */
+.btn-edit-order {
+  background: #fff;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.btn-edit-order:hover { background: #dbeafe; border-color: #3b82f6; }
+
+.order-edited-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.3rem;
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+}
+
+.edit-order-body {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.edit-order-type-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.order-type-pill {
+  padding: 0.45rem 1.1rem;
+  border-radius: 9999px;
+  border: 2px solid var(--border-subtle);
+  background: #f9fafb;
+  font-weight: 600;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.order-type-pill.active {
+  background: var(--orange);
+  border-color: var(--orange-dark);
+  color: #fff;
+}
+
+.edit-order-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 680px) {
+  .edit-order-columns { grid-template-columns: 1fr; }
+}
+
+/* Mini menu */
+.edit-cat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.65rem;
+}
+.edit-cat-pill {
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  border: 1.5px solid var(--border-subtle);
+  background: #f9fafb;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-transform: capitalize;
+  transition: background 0.12s, border-color 0.12s;
+}
+.edit-cat-pill.active {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: #1a3a1a;
+}
+.edit-cat-pill:hover:not(.active) { background: #e5e7eb; }
+
+.edit-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.edit-menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 0.1s;
+}
+.edit-menu-item:hover { background: var(--green-soft); border-color: var(--green); }
+.edit-menu-name { font-weight: 500; }
+.edit-menu-price { color: var(--muted); font-size: 0.82rem; white-space: nowrap; margin-left: 0.5rem; }
+.edit-menu-empty { text-align: center; padding: 1rem 0; font-style: italic; font-size: 0.88rem; }
+
+/* Lista pozycji zamówienia */
+.edit-order-items-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 0.65rem;
+}
+.edit-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 0.65rem;
+}
+.edit-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.88rem;
+}
+.edit-item-info { flex: 1; min-width: 0; }
+.edit-item-name { font-weight: 600; }
+.edit-item-portion, .edit-item-extras { font-size: 0.8rem; }
+.edit-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+.edit-item-price { font-weight: 700; color: var(--orange-dark); font-size: 0.82rem; white-space: nowrap; }
+
+.edit-ctrl-btn {
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 0.35rem;
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: 1.6rem;
+  height: 1.6rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, border-color 0.1s;
+  padding: 0;
+  font-family: inherit;
+}
+.edit-ctrl-btn--plus:hover  { background: var(--green-soft); border-color: var(--green); }
+.edit-ctrl-btn--minus:hover { background: #ffe3e3; border-color: #cc0000; }
+.edit-ctrl-btn--del:hover   { background: #fee2e2; border-color: #ef4444; }
+.edit-ctrl-count { font-weight: 700; font-size: 0.88rem; min-width: 1.4rem; text-align: center; }
+
+/* Pojemniki */
+.edit-containers-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.65rem;
+  background: #f9fafb;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border-subtle);
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.edit-containers-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Suma */
+.edit-order-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--orange-soft);
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.55rem;
+  font-weight: 600;
+  border: 1px solid #ffd6aa;
+  font-size: 0.95rem;
+}
+.edit-order-summary strong { color: var(--orange-dark); }
+
+/* ===================== EDYCJA DATY ZAMÓWIENIA ===================== */
+.history-order-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.btn-edit-date {
+  background: #fff;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.btn-edit-date:hover {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.edit-date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
 </style>
