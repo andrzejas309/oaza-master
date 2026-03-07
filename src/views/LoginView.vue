@@ -51,6 +51,7 @@ import { useRouter } from 'vue-router'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/firebase'
 import { getRoleForEmail } from '@/router'
+import { ROLE_ROUTES } from '@/utils/orderHelpers'
 
 const router = useRouter()
 
@@ -74,14 +75,8 @@ const onSubmit = async () => {
       throw new Error('Brak dostępu do roli. Sprawdź reguły Firestore.')
     })
 
-    const roleRoutes = {
-      'obsluga': '/obsluga',
-      'kuchnia': '/kuchnia',
-      'admin': '/admin'
-    }
-
-    if (roleRoutes[role]) {
-      await router.replace(roleRoutes[role])
+    if (ROLE_ROUTES[role]) {
+      await router.replace(ROLE_ROUTES[role])
     } else {
       error.value = 'Brak przypisanej roli do tego konta.'
     }
