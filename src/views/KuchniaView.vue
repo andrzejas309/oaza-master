@@ -442,8 +442,8 @@ const elapsedClass = (ts) => {
   padding-left: 1.35rem;
 }
 .item-extras {
-  font-size: 1.35rem;
-  font-weight: 500;
+  font-size: 1.5rem;
+  font-weight: 700;
   color: #6b7280;
   font-style: italic;
 }
