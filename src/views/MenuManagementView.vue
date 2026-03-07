@@ -23,6 +23,12 @@
         <button class="tab-btn" :class="{ active: activeTab === 'extras' }" @click="activeTab = 'extras'">
           🧂 Dodatki (Extras)
         </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'daily' }" @click="activeTab = 'daily'">
+          📅 Menu dnia
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'matrix' }" @click="activeTab = 'matrix'">
+          🔗 Matryca dodatków
+        </button>
       </div>
 
       <!-- ==================== ZAKŁADKA: MENU ==================== -->
@@ -108,7 +114,8 @@
               :class="{ 'items-list--empty': !localExtrasLists[category.value]?.length }"
               :group="{ name: 'extras' }"
               @start="(evt) => { draggedFromCategory = category.value; draggedItem = localExtrasLists[category.value][evt.oldIndex] }"
-              @end="(evt) => onExtrasDragEnd(evt, category.value)"
+              @add="() => onExtrasCrossCategory(category.value)"
+              @end="() => onExtrasSameCategory(category.value)"
             >
               <template #item="{ element: item, index }">
                 <li class="item-row item-row--extras item-row--draggable">
@@ -128,6 +135,154 @@
               </template>
             </draggable>
           </section>
+        </div>
+      </template>
+
+      <!-- ==================== ZAKŁADKA: MENU DNIA ==================== -->
+      <template v-if="activeTab === 'daily'">
+        <div v-if="dailyLoading" class="state-info muted">Ładowanie menu dnia…</div>
+        <div v-if="dailyError" class="state-error">❌ Błąd: {{ dailyError }}</div>
+
+        <div class="daily-grid">
+          <div v-for="day in DAYS" :key="day.key" class="card daily-card">
+            <h2 class="daily-card-title">{{ day.label }}</h2>
+
+            <!-- Zupy dnia -->
+            <div class="daily-section">
+              <div class="daily-section-label">🍲 Zupa dnia</div>
+              <div class="daily-assigned">
+                <div
+                  v-for="id in localDaily[day.key].zupy"
+                  :key="id"
+                  class="daily-assigned-item"
+                >
+                  <span>{{ menuItemName(id) }}</span>
+                  <button class="daily-remove-btn" @click="removeFromDay(day.key, 'zupy', id)" title="Usuń">✕</button>
+                </div>
+                <div v-if="!localDaily[day.key].zupy.length" class="daily-empty">Brak przypisanych zup</div>
+              </div>
+              <div class="daily-add-row">
+                <select
+                  class="form-select daily-select"
+                  v-model="addSelects[day.key].zupa"
+                  @change="addToDay(day.key, 'zupy', addSelects[day.key].zupa)"
+                >
+                  <option value="">— wybierz zupę —</option>
+                  <option v-for="item in availableZupy(day.key)" :key="item.id" :value="item.id">{{ item.name }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Dania dnia -->
+            <div class="daily-section">
+              <div class="daily-section-label">🍽️ Danie dnia</div>
+              <div class="daily-assigned">
+                <div
+                  v-for="id in localDaily[day.key].dania"
+                  :key="id"
+                  class="daily-assigned-item"
+                >
+                  <span>{{ menuItemName(id) }}</span>
+                  <button class="daily-remove-btn" @click="removeFromDay(day.key, 'dania', id)" title="Usuń">✕</button>
+                </div>
+                <div v-if="!localDaily[day.key].dania.length" class="daily-empty">Brak przypisanych dań</div>
+              </div>
+              <div class="daily-add-row">
+                <select
+                  class="form-select daily-select"
+                  v-model="addSelects[day.key].danie"
+                  @change="addToDay(day.key, 'dania', addSelects[day.key].danie)"
+                >
+                  <option value="">— wybierz danie —</option>
+                  <option v-for="item in availableDania(day.key)" :key="item.id" :value="item.id">{{ item.name }}</option>
+                </select>
+              </div>
+            </div>
+
+            <div v-if="dailySaving[day.key] || dailySaved[day.key]" class="daily-status">
+              <span v-if="dailySaving[day.key]" class="daily-saving">Zapisywanie…</span>
+              <span v-else-if="dailySaved[day.key]" class="daily-saved">✓ Zapisano</span>
+            </div>
+            <div class="daily-card-footer">
+              <button class="btn-daily-save" @click="saveDay(day.key)" :disabled="dailySaving[day.key]">
+                Zapisz
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ==================== ZAKŁADKA: MATRYCA DODATKÓW ==================== -->
+      <template v-if="activeTab === 'matrix'">
+        <div class="matrix-filter-bar">
+          <button
+            v-for="cat in matrixCategories"
+            :key="cat.value"
+            class="matrix-cat-pill"
+            :class="{ active: matrixCategory === cat.value }"
+            @click="matrixCategory = cat.value"
+          >{{ cat.label }}</button>
+        </div>
+
+        <div v-if="matrixMenuItems.length === 0" class="state-info muted">Brak pozycji w tej kategorii.</div>
+
+        <div class="matrix-grid">
+          <div
+            v-for="item in matrixMenuItems"
+            :key="item.id"
+            class="card matrix-card"
+          >
+            <div class="matrix-card-header">
+              <span class="matrix-item-name">{{ item.name }}</span>
+              <span class="matrix-item-price">{{ item.price }} zł</span>
+            </div>
+
+            <!-- Przypisane extras -->
+            <div class="matrix-assigned">
+              <div
+                v-for="eid in (matrixLocal[item.id] ?? [])"
+                :key="eid"
+                class="matrix-tag"
+                :class="extrasTypeClass(eid)"
+              >
+                <span>{{ extrasName(eid) }}</span>
+                <button class="matrix-tag-remove" @click="matrixRemove(item.id, eid)">✕</button>
+              </div>
+              <div v-if="!(matrixLocal[item.id] ?? []).length" class="daily-empty">Brak przypisanych dodatków</div>
+            </div>
+
+            <!-- Dodaj extras -->
+            <select
+              class="form-select matrix-add-select"
+              @change="(e) => { matrixAdd(item.id, e.target.value); e.target.value = '' }"
+            >
+              <option value="">— dodaj extras —</option>
+              <optgroup label="Dodatki">
+                <option
+                  v-for="e in availableExtrasForItem(item.id, 'dodatek')"
+                  :key="e.id"
+                  :value="e.id"
+                >{{ e.name }}</option>
+              </optgroup>
+              <optgroup label="Opcje">
+                <option
+                  v-for="e in availableExtrasForItem(item.id, 'opcja')"
+                  :key="e.id"
+                  :value="e.id"
+                >{{ e.name }}</option>
+              </optgroup>
+            </select>
+
+            <div v-if="matrixSaving[item.id] || matrixSaved[item.id]" class="daily-status">
+              <span v-if="matrixSaving[item.id]" class="daily-saving">Zapisywanie…</span>
+              <span v-else-if="matrixSaved[item.id]" class="daily-saved">✓ Zapisano</span>
+            </div>
+            <div class="daily-card-footer">
+              <button class="btn-daily-save btn-matrix-save" @click="matrixSave(item.id)" :disabled="matrixSaving[item.id]">
+                Zapisz
+              </button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -211,11 +366,13 @@
  * AI: Vue component should contain only presentation logic.
  * Move business logic to composables.
  */
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
 import { useExtras, EXTRAS_CATEGORIES } from '@/composables/useExtras'
 import { useAuth } from '@/composables/useAuth'
+import { useDailyMenu, DAYS } from '@/composables/useDailyMenu'
+import { useExtrasMatrix } from '@/composables/useExtrasMatrix'
 import draggable from 'vuedraggable'
 
 const router = useRouter()
@@ -229,8 +386,127 @@ const {  menuItems, menuByCategory,
 const {
   extrasItems, extrasByCategory,
   loading: extrasLoading, error: extrasError,
-  fetchExtras, addExtra, updateExtra, deleteExtra, reorderExtras
+  fetchExtras, addExtra, updateExtra, deleteExtra, reorderExtras,
 } = useExtras()
+
+
+// ==================== Menu dnia ====================
+const {
+  dailyMenu,
+  loading: dailyLoading,
+  error: dailyError,
+  fetchDailyMenu,
+  saveDayMenu,
+} = useDailyMenu()
+
+// Pozycje z menu w kategoriach zupa dnia / danie dnia
+const zupaDniaItems  = computed(() => menuItems.value.filter(i => i.category === 'zupa dnia').sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity)))
+const danieDniaItems = computed(() => menuItems.value.filter(i => i.category === 'danie dnia').sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity)))
+
+// Pomocnicza — nazwa pozycji po ID
+const menuItemName = (id) => menuItems.value.find(i => i.id === id)?.name ?? id
+
+// Pozycje jeszcze nieprzypisane do danego dnia
+const availableZupy  = (dayKey) => zupaDniaItems.value.filter(i => !localDaily[dayKey].zupy.includes(i.id))
+const availableDania = (dayKey) => danieDniaItems.value.filter(i => !localDaily[dayKey].dania.includes(i.id))
+
+// Lokalne kopie per dzień
+const localDaily = reactive(Object.fromEntries(DAYS.map(d => [d.key, { zupy: [], dania: [] }])))
+const dailySaving = reactive(Object.fromEntries(DAYS.map(d => [d.key, false])))
+const dailySaved  = reactive(Object.fromEntries(DAYS.map(d => [d.key, false])))
+
+// Stan selectów per dzień
+const addSelects = reactive(Object.fromEntries(DAYS.map(d => [d.key, { zupa: '', danie: '' }])))
+
+// Synchronizuj localDaily gdy dane z bazy się załadują
+watch(dailyMenu, (val) => {
+  DAYS.forEach(d => {
+    localDaily[d.key].zupy  = [...(val[d.key]?.zupy  ?? [])]
+    localDaily[d.key].dania = [...(val[d.key]?.dania ?? [])]
+  })
+}, { immediate: true, deep: true })
+
+const addToDay = (dayKey, field, id) => {
+  if (!id || localDaily[dayKey][field].includes(id)) return
+  localDaily[dayKey][field].push(id)
+  addSelects[dayKey][field === 'zupy' ? 'zupa' : 'danie'] = ''
+}
+
+const removeFromDay = (dayKey, field, id) => {
+  localDaily[dayKey][field] = localDaily[dayKey][field].filter(i => i !== id)
+}
+
+const saveDay = async (dayKey) => {
+  dailySaving[dayKey] = true
+  dailySaved[dayKey]  = false
+  try {
+    await saveDayMenu(dayKey, localDaily[dayKey].zupy, localDaily[dayKey].dania)
+    dailySaved[dayKey] = true
+    setTimeout(() => { dailySaved[dayKey] = false }, 2000)
+  } catch (err) {
+    alert('Błąd zapisu: ' + err.message)
+  } finally {
+    dailySaving[dayKey] = false
+  }
+}
+
+// ==================== Matryca dodatków ====================
+const { matrix, fetchMatrix, saveMatrix } = useExtrasMatrix()
+
+const matrixCategory = ref('dania główne')
+const MATRIX_EXCLUDED = ['składniki', 'opakowania']
+const matrixCategories = computed(() => MENU_CATEGORIES.filter(c => !MATRIX_EXCLUDED.includes(c.value)))
+const matrixLocal    = reactive({})   // { [menuItemId]: string[] }
+const matrixSaving   = reactive({})
+const matrixSaved    = reactive({})
+
+// Pozycje menu dla wybranej kategorii
+const matrixMenuItems = computed(() =>
+  menuItems.value
+    .filter(i => i.category === matrixCategory.value)
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+)
+
+// Synchronizuj matrixLocal z bazą gdy dane się załadują
+watch(matrix, (val) => {
+  Object.entries(val).forEach(([id, ids]) => {
+    matrixLocal[id] = [...ids]
+  })
+}, { immediate: true, deep: true })
+
+// Pomocnicze
+const extrasName      = (eid) => extrasItems.value.find(e => e.id === eid)?.name ?? eid
+const extrasTypeClass = (eid) => {
+  const cat = extrasItems.value.find(e => e.id === eid)?.category
+  return cat === 'opcja' ? 'matrix-tag--opcja' : 'matrix-tag--dodatek'
+}
+const availableExtrasForItem = (itemId, category) =>
+  extrasItems.value.filter(e => e.category === category && !(matrixLocal[itemId] ?? []).includes(e.id))
+
+const matrixAdd = (itemId, eid) => {
+  if (!eid) return
+  if (!matrixLocal[itemId]) matrixLocal[itemId] = []
+  if (!matrixLocal[itemId].includes(eid)) matrixLocal[itemId].push(eid)
+}
+
+const matrixRemove = (itemId, eid) => {
+  if (!matrixLocal[itemId]) return
+  matrixLocal[itemId] = matrixLocal[itemId].filter(id => id !== eid)
+}
+
+const matrixSave = async (itemId) => {
+  matrixSaving[itemId] = true
+  matrixSaved[itemId]  = false
+  try {
+    await saveMatrix(itemId, matrixLocal[itemId] ?? [])
+    matrixSaved[itemId] = true
+    setTimeout(() => { matrixSaved[itemId] = false }, 2000)
+  } catch (err) {
+    alert('Błąd zapisu: ' + err.message)
+  } finally {
+    matrixSaving[itemId] = false
+  }
+}
 
 // Lokalne kopie list per kategoria — reactive (draggable mutuje je bezpośrednio)
 const localMenuLists = reactive({})
@@ -268,6 +544,8 @@ const editingId = ref(null)
 onMounted(() => {
   fetchMenu()
   fetchExtras()
+  fetchDailyMenu()
+  fetchMatrix()
 })
 
 
@@ -327,29 +605,39 @@ const onMenuDragEnd = async (evt, targetCategory) => {
   }
 }
 
-const onExtrasDragEnd = async (evt, targetCategory) => {
-  if (reordering.value) return
+const onExtrasCrossCategory = async (targetCategory) => {
+  // @add odpala się na liście docelowej — tutaj wiemy dokładnie gdzie element trafił
+  if (reordering.value || !draggedItem || draggedFromCategory === targetCategory) return
   reordering.value = true
+  const item = draggedItem
+  const fromCategory = draggedFromCategory
+  draggedItem = null
+  draggedFromCategory = null
   try {
-    const crossCategory = draggedFromCategory !== targetCategory
-
-    if (crossCategory && draggedItem) {
-      await updateExtra(draggedItem.id, {
-        name: draggedItem.name,
-        price: draggedItem.price,
-        category: targetCategory,
-      })
-      await reorderExtras(localExtrasLists[targetCategory])
-      if (localExtrasLists[draggedFromCategory]?.length) {
-        await reorderExtras(localExtrasLists[draggedFromCategory])
-      }
-      await fetchExtras()
-    } else {
-      await reorderExtras(localExtrasLists[targetCategory])
+    await updateExtra(item.id, {
+      name: item.name,
+      price: item.price,
+      category: targetCategory,
+    })
+    await reorderExtras(localExtrasLists[targetCategory])
+    if (localExtrasLists[fromCategory]?.length) {
+      await reorderExtras(localExtrasLists[fromCategory])
     }
+    await fetchExtras()
   } finally {
-    draggedItem = null
-    draggedFromCategory = null
+    reordering.value = false
+  }
+}
+
+const onExtrasSameCategory = async (targetCategory) => {
+  // @end odpala się zawsze — ignoruj jeśli był cross-category (obsłużony przez @add)
+  if (reordering.value || draggedFromCategory !== targetCategory) return
+  reordering.value = true
+  draggedItem = null
+  draggedFromCategory = null
+  try {
+    await reorderExtras(localExtrasLists[targetCategory])
+  } finally {
     reordering.value = false
   }
 }
@@ -445,6 +733,7 @@ const executeDelete = async () => {
 .tab-btn:hover { background: #f3f4f6; color: var(--text); }
 .tab-btn.active { color: var(--text); border-bottom-color: var(--orange); font-weight: 800; }
 
+
 /* ===================== PASEK AKCJI ===================== */
 .actions-bar {
   margin-top: 1rem;
@@ -464,10 +753,10 @@ const executeDelete = async () => {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .btn-add-item--menu {
-  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
-  box-shadow: 0 4px 12px rgba(47, 158, 68, 0.25);
+  background: linear-gradient(135deg, var(--orange) 0%, var(--orange-dark) 100%);
+  box-shadow: 0 4px 12px rgba(230, 119, 0, 0.25);
 }
-.btn-add-item--menu:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(47, 158, 68, 0.4); }
+.btn-add-item--menu:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(230, 119, 0, 0.4); }
 .btn-add-item--extras {
   background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
@@ -698,5 +987,268 @@ const executeDelete = async () => {
   .form-actions { flex-direction: column; }
   .btn-primary, .btn-secondary-form, .btn-danger-form { width: 100%; text-align: center; }
   .tabs-bar { overflow-x: auto; }
+}
+
+/* ===================== MENU DNIA ===================== */
+.daily-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) { .daily-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .daily-grid { grid-template-columns: 1fr; } }
+
+.daily-card {
+  padding: 1rem 1.1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.daily-card-title {
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0 0 0.1rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 2px solid #0ea5e9;
+  color: #0284c7;
+}
+
+.daily-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.daily-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.1rem;
+}
+
+.daily-assigned {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 1.5rem;
+}
+
+.daily-assigned-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.45rem;
+  background: #e0f2fe;
+  border: 1.5px solid #7dd3fc;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0369a1;
+}
+
+.daily-remove-btn {
+  background: none;
+  border: none;
+  color: #0284c7;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.12s;
+}
+.daily-remove-btn:hover { opacity: 1; color: #dc2626; }
+
+.daily-add-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.daily-select {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.55rem;
+  min-width: 0;
+}
+
+.daily-empty {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  padding: 0.15rem 0.1rem;
+}
+
+.daily-status {
+  text-align: center;
+  min-height: 1.2rem;
+}
+
+.daily-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+}
+
+.daily-saving { font-size: 0.78rem; color: var(--muted); }
+.daily-saved  { font-size: 0.78rem; color: #16a34a; font-weight: 700; }
+
+.btn-daily-add {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+.btn-daily-add:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+  transform: translateY(-1px);
+}
+.btn-daily-add:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-daily-save {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.btn-daily-save:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+  transform: translateY(-1px);
+}
+.btn-daily-save:disabled { opacity: 0.6; cursor: not-allowed; }
+/* ===================== MATRYCA DODATKÓW ===================== */
+.matrix-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.matrix-cat-pill {
+  background: #f3f4f6;
+  border: 1.5px solid #e5e7eb;
+  color: #6b7280;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.matrix-cat-pill:hover {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.matrix-cat-pill.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+}
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 900px) { .matrix-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .matrix-grid { grid-template-columns: 1fr; } }
+
+.matrix-card {
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.matrix-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #f59e0b;
+}
+.matrix-item-name {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #92400e;
+}
+.matrix-item-price {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.matrix-assigned {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 1.5rem;
+}
+.matrix-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.matrix-tag--dodatek {
+  background: #fef3c7;
+  border: 1.5px solid #fcd34d;
+  color: #92400e;
+}
+.matrix-tag--opcja {
+  background: #ede9fe;
+  border: 1.5px solid #c4b5fd;
+  color: #4c1d95;
+}
+.matrix-tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  padding: 0;
+  line-height: 1;
+  transition: opacity 0.12s;
+}
+.matrix-tag-remove:hover { opacity: 1; color: #dc2626; }
+
+.matrix-add-select {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.btn-matrix-save {
+  font-size: 0.85rem;
+  padding: 0.35rem 1.2rem;
 }
 </style>

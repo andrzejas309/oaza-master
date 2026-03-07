@@ -4,12 +4,11 @@
     <!-- HEADER -->
     <header class="kuchnia-header">
       <div class="header-brand">
-        <span class="header-icon">👩‍🍳</span>
         <h1 class="kuchnia-title">Panel Kuchni</h1>
       </div>
       <nav class="header-nav">
-        <button class="btn-nav" @click="router.push('/admin')">Admin</button>
-        <button class="btn-nav" @click="router.push('/obsluga')">Obsługa</button>
+        <button v-if="userRole === 'admin'" class="btn-nav" @click="router.push('/admin')">Admin</button>
+        <button v-if="userRole === 'admin'" class="btn-nav" @click="router.push('/obsluga')">Obsługa</button>
         <button class="btn-nav btn-nav--logout" @click="logout">Wyloguj</button>
       </nav>
     </header>
@@ -113,13 +112,15 @@ import { db } from '@/firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { formatTime } from '@/utils/formatters'
-import { formatPortionPrefix } from '@/utils/formatters'
+import { formatTime, formatPortionPrefix } from '@/utils/formatters'
+import { getRoleForEmail } from '@/router'
+import { auth } from '@/firebase'
 
 const router = useRouter()
 const { logout } = useAuth()
 const orders = ref([])
 const now = ref(Date.now())
+const userRole = ref(null)
 
 let unsub = null
 let ticker = null
@@ -127,6 +128,13 @@ let ticker = null
 // ==================== Lifecycle ====================
 onMounted(() => {
   ticker = setInterval(() => { now.value = Date.now() }, 1000)
+
+  const currentUser = auth.currentUser
+  if (currentUser?.email) {
+    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
+      userRole.value = role
+    })
+  }
 
   const q = query(
     collection(db, 'orders'),
@@ -406,7 +414,7 @@ const elapsedClass = (ts) => {
 }
 
 .item-portion-prefix {
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   font-weight: 900;
   color: #1e3a8a;
   flex-shrink: 0;

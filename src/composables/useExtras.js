@@ -8,9 +8,8 @@ const error = ref(null)
 
 // Kategorie dodatków (extras)
 export const EXTRAS_CATEGORIES = [
-  { value: 'main', label: 'Extras – Dania główne' },
-  { value: 'soups', label: 'Extras – Zupy' },
-  { value: 'sides', label: 'Extras – Dodatki/Surówki' },
+  { value: 'dodatek', label: 'Dodatek' },
+  { value: 'opcja',   label: 'Opcja' },
 ]
 
 export function useExtras() {
@@ -116,16 +115,13 @@ export function useExtras() {
 
   // Extras dla konkretnej kategorii menu
   const extrasForCategory = (menuCategory) => {
-    const catMap = {
-      'dania główne': 'main',
-      'danie dnia':   'main',
-      'zupy':         'soups',
-      'zupa dnia':    'soups',
-      'dodatki':      'sides',
-    }
-    const key = catMap[menuCategory]
-    if (!key) return []
-    return extrasByCategory.value[key] || []
+    // Wszystkie kategorie dań dostają pełną listę — i dodatki i opcje
+    const hasDishes = ['dania główne', 'danie dnia', 'zupy', 'zupa dnia', 'dodatki', 'surówki']
+    if (!hasDishes.includes(menuCategory)) return []
+    return extrasItems.value
+      .filter(e => e.category === 'dodatek' || e.category === 'opcja')
+      .slice()
+      .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
   }
 
   return {

@@ -24,7 +24,7 @@ const ROLE_CACHE_KEY = 'oaza_role_cache'
 const ROLE_TTL_MS    = 8 * 60 * 60 * 1000 // 8 godzin
 
 // Role wymagające ZAWSZE świeżego fetcha (wysokie uprawnienia)
-const HIGH_PRIVILEGE_ROLES = ['admin']
+const HIGH_PRIVILEGE_ROLES = ['admin', 'master_admin']
 
 function getCachedRole(uid) {
     try {
@@ -127,9 +127,8 @@ router.beforeEach(async (to, from, next) => {
     if (!role) return next('/login')
 
     const required = to.meta.requiredRole
-    // Admin może wejść wszędzie
-    if (required && role !== required && role !== 'admin') {
-        // Przekieruj do widoku wynikającego z własnej roli
+    // Admin i master_admin mogą wejść wszędzie
+    if (required && role !== required && role !== 'admin' && role !== 'master_admin') {
         return next(ROLE_ROUTES[role] ?? '/login')
     }
 

@@ -8,14 +8,14 @@
 
 export const PORTIONS_FULL = [
   { label: 'Cała porcja', value: 1 },
-  { label: '½ porcji', value: 0.5 },
-  { label: '1 ½ porcji', value: 1.5 },
+  { label: 'Pół porcji', value: 0.5 },
+  { label: 'Półtora porcji', value: 1.5 },
   { label: 'Podwójna porcja', value: 2 },
 ]
 
 export const PORTIONS_HALF = [
   { label: 'Cała porcja', value: 1 },
-  { label: '½ porcji', value: 0.5 },
+  { label: 'Pół porcji', value: 0.5 },
 ]
 
 /** Items that always use count (never portion dialog) */
@@ -34,9 +34,10 @@ export const PORTION_INCLUDED_NAMES = ['naleśniki', 'pierogi']
 // ---------------------------------------------------------------------------
 
 export const ROLE_ROUTES = {
-  obsluga: '/obsluga',
-  kuchnia: '/kuchnia',
-  admin: '/admin',
+  obsluga:      '/obsluga',
+  kuchnia:      '/kuchnia',
+  admin:        '/admin',
+  master_admin: '/admin',
 }
 
 // ---------------------------------------------------------------------------

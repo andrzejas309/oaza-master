@@ -8,7 +8,6 @@
         <h1 class="header-title">Panel admina</h1>
       </div>
       <nav class="header-nav">
-        <button class="btn-nav" @click="router.push('/menu-management')">Zarządzaj Menu</button>
         <button class="btn-nav" @click="router.push('/obsluga')">Obsługa</button>
         <button class="btn-nav" @click="router.push('/kuchnia')">Kuchnia</button>
         <button class="btn-nav btn-nav--logout" @click="logout">Wyloguj</button>
@@ -17,12 +16,13 @@
 
     <div class="admin-layout">
 
-      <DateFilterBar @change="filter = $event" />
-
-      <!-- Przycisk Historia zamówień -->
-      <section style="margin-top: 1rem;">
+      <!-- Przyciski akcji -->
+      <section class="admin-actions-bar" style="margin-top: 1rem;">
         <button class="btn-history" @click="showHistoryDialog = true">
           📋 Historia zamówień
+        </button>
+        <button class="btn-history btn-history--menu" @click="router.push('/menu-management')">
+          🍴 Zarządzaj menu
         </button>
       </section>
 
@@ -53,6 +53,8 @@
           </div>
         </div>
       </section>
+
+      <DateFilterBar @change="filter = $event" style="margin-top: 1rem;" />
 
       <!-- Metryki + TOP pozycje -->
       <div class="admin-top-grid">
@@ -151,7 +153,7 @@
         <div class="dialog-panel-header">
           <h2 class="dialog-panel-title">Historia zamówień</h2>
           <div class="history-header-actions">
-            <label class="delete-toggle" :class="{ active: deleteMode }">
+            <label v-if="isMasterAdmin" class="delete-toggle" :class="{ active: deleteMode }">
               <input type="checkbox" v-model="deleteMode" />
               <span class="delete-toggle-track">
                 <span class="delete-toggle-thumb"></span>
@@ -435,6 +437,7 @@
 
 import { computed, ref, reactive, onMounted } from 'vue'
 import { db } from '@/firebase'
+import { auth } from '@/firebase'
 import { useRouter } from 'vue-router'
 import { collection, getDocs, query, orderBy, limit, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
@@ -445,6 +448,7 @@ import { useExtras } from '@/composables/useExtras'
 import { useAuth } from '@/composables/useAuth'
 import { generateItemKey } from '@/utils/orderHelpers'
 import { formatQuantity, formatOrderTime } from '@/utils/formatters'
+import { getRoleForEmail } from '@/router'
 
 const router = useRouter()
 const { logout } = useAuth()
@@ -453,6 +457,8 @@ const filter = ref({ mode: 'day', date: null, month: null, year: null })
 const showAllItemsDialog = ref(false)
 const showHistoryDialog = ref(false)
 const showBackfillPicker = ref(false)
+const userRole = ref(null)
+const isMasterAdmin = computed(() => userRole.value === 'master_admin')
 
 // ==================== Menu + Extras (do edycji zamówień) ====================
 const { menuItems, fetchMenu } = useMenu()
@@ -673,6 +679,12 @@ onMounted(() => {
   fetchData()
   fetchMenu()
   fetchExtras()
+  const currentUser = auth.currentUser
+  if (currentUser?.email) {
+    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
+      userRole.value = role
+    })
+  }
 })
 
 // ==================== Data Fetching ====================
@@ -827,7 +839,7 @@ const topItems = computed(() => {
   return Object.entries(itemStats)
     .map(([name, stats]) => ({ name, ...stats }))
     .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 10)
+    .slice(0, 5)
 })
 
 const allItems = computed(() => {

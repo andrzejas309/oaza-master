@@ -50,8 +50,8 @@ export const formatPortionLabel = (val, itemName) => {
 export const formatPortionPrefix = (val, itemName) => {
   if (!val || val === 1) return null
   if (itemName === 'golonka') return `${Math.round(val * 100)}g`
-  const labels = { 0.5: '½×', 1.5: '1½×', 2: '2×', 3: '3×' }
-  return labels[val] ?? `${val}×`
+  const labels = { 0.5: '1/2x', 1.5: '1½x', 2: '2x', 3: '3x' }
+  return labels[val] ?? `${val}x`
 }
 
 /**

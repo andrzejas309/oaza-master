@@ -314,6 +314,8 @@ import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
 import { useBackfillDate } from '@/composables/useBackfillDate'
 import { useAuth } from '@/composables/useAuth'
+import { useDailyMenu, getTodayKey } from '@/composables/useDailyMenu'
+import { useExtrasMatrix } from '@/composables/useExtrasMatrix'
 import { getRoleForEmail } from '@/router'
 import { generateItemKey, PORTIONS_FULL, PORTIONS_HALF, PORTION_EXCLUDED, PORTION_INCLUDED_NAMES } from '@/utils/orderHelpers'
 import { formatPortionLabel, formatTime } from '@/utils/formatters'
@@ -323,13 +325,15 @@ const { logout } = useAuth()
 
 const { menuItems, fetchMenu } = useMenu()
 const menu = computed(() => menuItems.value)
-const { extrasPriceMap, extrasForCategory, fetchExtras } = useExtras()
+const { extrasPriceMap, extrasItems, fetchExtras } = useExtras()
 const { isActive: backfillActive, label: backfillLabel, getEffectiveDate } = useBackfillDate()
+const { dailyMenu, fetchDailyMenu } = useDailyMenu()
+const { matrix: extrasMatrix, fetchMatrix, getExtrasForItem } = useExtrasMatrix()
 
 const MAX_ORDERS_DISPLAY = 8
 
 // Lista kategorii do zakładek menu (wartości string)
-const categoryList = MENU_CATEGORIES.map(c => c.value)
+const categoryList = MENU_CATEGORIES.map(c => c.value).filter(c => c !== 'opakowania')
 
 
 // ==================== State ====================
@@ -370,6 +374,8 @@ let unsub = null
 onMounted(() => {
   fetchMenu()
   fetchExtras()
+  fetchDailyMenu()
+  fetchMatrix()
   unsub = onSnapshot(collection(db, 'orders'), (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     activeOrders.value = all.filter((o) => o.status === 'w_toku')
@@ -452,11 +458,22 @@ const containersPrice = computed(() => containerCount.value * containerPrice.val
 
 // ==================== Computed - Menu ====================
 const filteredMenu = computed(() => {
-  const selectedItems = menu.value
+  let items = menu.value
     .filter(i => i.category === selectedCategory.value)
     .slice()
     .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
-  return { [selectedCategory.value]: selectedItems }
+
+  const todayKey = getTodayKey()
+  if (selectedCategory.value === 'zupa dnia') {
+    const ids = dailyMenu.value[todayKey]?.zupy ?? []
+    return { 'zupa dnia': items.filter(i => ids.includes(i.id)) }
+  }
+  if (selectedCategory.value === 'danie dnia') {
+    const ids = dailyMenu.value[todayKey]?.dania ?? []
+    return { 'danie dnia': items.filter(i => ids.includes(i.id)) }
+  }
+
+  return { [selectedCategory.value]: items }
 })
 
 // ==================== Helper Functions ====================
@@ -503,7 +520,7 @@ const toGoQueueCount = computed(() => Math.max(0, activeOrders.value.filter((o) 
 const canEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return false
-  return ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki'].includes(base.category)
+  return (extrasMatrix.value[base.id] ?? []).length > 0
 }
 
 
@@ -564,7 +581,7 @@ const confirmGramAmount = () => {
 const startEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return
-  const extras = extrasForCategory(base.category)
+  const extras = getExtrasForItem(base.id, extrasItems.value)
   if (!extras || !extras.length) return
   extrasOptions.value = extras
   extrasDialogItem.value = base

@@ -257,6 +257,15 @@ button {
 
 /* ===================== PRZYCISK HISTORIA ===================== */
 
+.admin-actions-bar {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.admin-actions-bar .btn-history {
+    flex: 1;
+}
+
 .btn-history {
     width: 100%;
     background: linear-gradient(135deg, #ff8a3c 0%, #e67700 100%);
@@ -272,9 +281,18 @@ button {
     font-family: inherit;
 }
 
+.btn-history--menu {
+    background: linear-gradient(135deg, #2f9e44 0%, #2b8a3e 100%);
+    box-shadow: 0 4px 12px rgba(47, 158, 68, 0.3);
+}
+
 .btn-history:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(230, 119, 0, 0.4);
+}
+
+.btn-history--menu:hover {
+    box-shadow: 0 6px 20px rgba(47, 158, 68, 0.4);
 }
 
 .btn-history:active {
