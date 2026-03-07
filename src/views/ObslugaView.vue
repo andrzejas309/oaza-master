@@ -316,8 +316,9 @@ import { useBackfillDate } from '@/composables/useBackfillDate'
 import { useAuth } from '@/composables/useAuth'
 import { useDailyMenu, getTodayKey } from '@/composables/useDailyMenu'
 import { useExtrasMatrix } from '@/composables/useExtrasMatrix'
+import { usePortionConfig, PORTION_MODE_GRAM, ALL_PORTIONS } from '@/composables/usePortionConfig'
 import { getRoleForEmail } from '@/router'
-import { generateItemKey, PORTIONS_FULL, PORTIONS_HALF, PORTION_EXCLUDED, PORTION_INCLUDED_NAMES } from '@/utils/orderHelpers'
+import { generateItemKey } from '@/utils/orderHelpers'
 import { formatPortionLabel, formatTime } from '@/utils/formatters'
 
 const router = useRouter()
@@ -329,6 +330,7 @@ const { extrasPriceMap, extrasItems, fetchExtras } = useExtras()
 const { isActive: backfillActive, label: backfillLabel, getEffectiveDate } = useBackfillDate()
 const { dailyMenu, fetchDailyMenu } = useDailyMenu()
 const { matrix: extrasMatrix, fetchMatrix, getExtrasForItem } = useExtrasMatrix()
+const { fetchPortionConfig, getPortionConfig } = usePortionConfig()
 
 const MAX_ORDERS_DISPLAY = 8
 
@@ -353,7 +355,7 @@ const activeSeat = ref(0)
 // Dialog state
 const portionDialogOpen = ref(false)
 const portionDialogItem = ref(null)
-const PORTIONS = ref(PORTIONS_FULL)
+const PORTIONS = ref(ALL_PORTIONS)
 const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
 const extrasDialogItemKey = ref(null)
@@ -376,15 +378,16 @@ onMounted(() => {
   fetchExtras()
   fetchDailyMenu()
   fetchMatrix()
+  fetchPortionConfig()
   unsub = onSnapshot(collection(db, 'orders'), (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     activeOrders.value = all.filter((o) => o.status === 'w_toku')
   })
   const currentUser = auth.currentUser
   if (currentUser?.email) {
-    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
-      userRole.value = role
-    })
+    getRoleForEmail(currentUser.email, currentUser.uid)
+      .then(role => { userRole.value = role })
+      .catch(err => console.error('Błąd pobierania roli:', err))
   }
 })
 
@@ -526,22 +529,29 @@ const canEditItem = (orderItem) => {
 
 // ==================== Order Item Management ====================
 const increase = (item) => {
-  if (item.name === 'golonka') {
+  const cfg = getPortionConfig(item.id)
+
+  // Tryb gramaturowy
+  if (cfg.mode === PORTION_MODE_GRAM) {
     gramDialogItem.value = item; gramValue.value = ''; gramDialogOpen.value = true; return
   }
-  const portionCategories = ['zupy', 'zupa dnia', 'dodatki', 'surówki']
-  if (PORTION_EXCLUDED.includes(item.name)) {
-    const key = generateItemKey(item.name, 1, [])
-    if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
-    else ensureEntry(item.name, 1, [])
-    return
-  }
-  const nameLC = item.name.toLowerCase()
-  const isPortionName = PORTION_INCLUDED_NAMES.some(n => nameLC.includes(n))
-  if (portionCategories.includes(item.category) || isPortionName) {
-    PORTIONS.value = ['dodatki', 'surówki'].includes(item.category) ? PORTIONS_HALF : PORTIONS_FULL
+
+  // Tryb wyboru porcji
+  if (cfg.mode === 'portions' && cfg.portions.length > 0) {
+    // Jeśli tylko jedna porcja dostępna — dodaj od razu bez dialogu
+    if (cfg.portions.length === 1) {
+      const qty = cfg.portions[0]
+      const key = generateItemKey(item.name, qty, [])
+      if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
+      else ensureEntry(item.name, qty, [])
+      return
+    }
+    // Wiele opcji — pokaż dialog
+    PORTIONS.value = ALL_PORTIONS.filter(p => cfg.portions.includes(p.value))
     portionDialogItem.value = item; portionDialogOpen.value = true; return
   }
+
+  // Tryb count — tylko licznik (PORTION_MODE_COUNT lub brak konfiguracji)
   const key = generateItemKey(item.name, 1, [])
   if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
   else ensureEntry(item.name, 1, [])
@@ -582,7 +592,10 @@ const startEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return
   const extras = getExtrasForItem(base.id, extrasItems.value)
-  if (!extras || !extras.length) return
+  if (!extras || !extras.length) {
+    // Extras zostały usunięte z matrycy — cicha obsługa bez popupu
+    return
+  }
   extrasOptions.value = extras
   extrasDialogItem.value = base
   extrasDialogItemKey.value = generateItemKey(orderItem.name, orderItem.quantity, orderItem.extras)

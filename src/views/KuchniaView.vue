@@ -131,9 +131,9 @@ onMounted(() => {
 
   const currentUser = auth.currentUser
   if (currentUser?.email) {
-    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
-      userRole.value = role
-    })
+    getRoleForEmail(currentUser.email, currentUser.uid)
+      .then(role => { userRole.value = role })
+      .catch(err => console.error('Błąd pobierania roli:', err))
   }
 
   const q = query(

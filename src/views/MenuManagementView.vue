@@ -29,6 +29,9 @@
         <button class="tab-btn" :class="{ active: activeTab === 'matrix' }" @click="activeTab = 'matrix'">
           🔗 Matryca dodatków
         </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'portions' }" @click="activeTab = 'portions'">
+          ⚖️ Porcje
+        </button>
       </div>
 
       <!-- ==================== ZAKŁADKA: MENU ==================== -->
@@ -286,6 +289,76 @@
         </div>
       </template>
 
+      <!-- ==================== ZAKŁADKA: PORCJE ==================== -->
+      <template v-if="activeTab === 'portions'">
+        <div class="matrix-filter-bar">
+          <button
+            v-for="cat in portionCategories"
+            :key="cat.value"
+            class="portion-cat-pill"
+            :class="{ active: portionCategory === cat.value }"
+            @click="portionCategory = cat.value"
+          >{{ cat.label }}</button>
+        </div>
+
+        <div v-if="portionMenuItems.length === 0" class="state-info muted">Brak pozycji w tej kategorii.</div>
+
+        <div class="matrix-grid">
+          <div v-for="item in portionMenuItems" :key="item.id" class="card matrix-card">
+            <div class="matrix-card-header" style="border-bottom-color: #10b981;">
+              <span class="matrix-item-name" style="color: #065f46;">{{ item.name }}</span>
+              <span class="matrix-item-price">{{ item.price }} zł</span>
+            </div>
+
+            <!-- Tryb -->
+            <div class="portion-mode-row">
+              <label
+                v-for="m in portionModes"
+                :key="m.value"
+                class="portion-mode-option"
+                :class="{ active: (portionLocal[item.id]?.mode ?? PORTION_MODE_COUNT) === m.value }"
+              >
+                <input type="radio" :name="'mode_' + item.id" :value="m.value" v-model="portionLocal[item.id].mode" />
+                {{ m.label }}
+              </label>
+            </div>
+
+            <!-- Checkboxy porcji (tylko gdy tryb = portions) -->
+            <div v-if="portionLocal[item.id]?.mode === 'portions'" class="portion-checks">
+              <label
+                v-for="p in ALL_PORTIONS"
+                :key="p.value"
+                class="portion-check-row"
+                :class="{ checked: portionLocal[item.id]?.portions?.includes(p.value) }"
+              >
+                <input
+                  type="checkbox"
+                  :value="p.value"
+                  v-model="portionLocal[item.id].portions"
+                />
+                {{ p.label }}
+              </label>
+            </div>
+            <div v-else-if="portionLocal[item.id]?.mode === PORTION_MODE_GRAM" class="daily-empty">
+              Użytkownik wpisuje gramaturę ręcznie
+            </div>
+            <div v-else class="daily-empty">
+              Brak dialogu porcji — tylko licznik sztuk
+            </div>
+
+            <div v-if="portionSaving[item.id] || portionSaved[item.id]" class="daily-status">
+              <span v-if="portionSaving[item.id]" class="daily-saving">Zapisywanie…</span>
+              <span v-else-if="portionSaved[item.id]" class="daily-saved">✓ Zapisano</span>
+            </div>
+            <div class="daily-card-footer">
+              <button class="btn-portion-save" @click="portionSave(item.id)" :disabled="portionSaving[item.id]">
+                Zapisz
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+
     </main>
 
     <!-- ===== Dialog dodawania/edycji ===== -->
@@ -373,6 +446,7 @@ import { useExtras, EXTRAS_CATEGORIES } from '@/composables/useExtras'
 import { useAuth } from '@/composables/useAuth'
 import { useDailyMenu, DAYS } from '@/composables/useDailyMenu'
 import { useExtrasMatrix } from '@/composables/useExtrasMatrix'
+import { usePortionConfig, ALL_PORTIONS, PORTION_MODE_GRAM, PORTION_MODE_COUNT } from '@/composables/usePortionConfig'
 import draggable from 'vuedraggable'
 
 const router = useRouter()
@@ -508,6 +582,68 @@ const matrixSave = async (itemId) => {
   }
 }
 
+// ==================== Konfiguracja porcji ====================
+const { portionConfig, fetchPortionConfig, savePortionConfig } = usePortionConfig()
+
+const PORTION_CATEGORIES_EXCLUDED = ['składniki', 'opakowania', 'napoje']
+const portionCategories = computed(() => MENU_CATEGORIES.filter(c => !PORTION_CATEGORIES_EXCLUDED.includes(c.value)))
+const portionCategory = ref('dania główne')
+
+const portionModes = [
+  { value: 'portions', label: '⚖️ Wybór porcji' },
+  { value: PORTION_MODE_GRAM,  label: '⚖️ Gramatura' },
+  { value: PORTION_MODE_COUNT, label: '🔢 Tylko licznik' },
+]
+
+const portionMenuItems = computed(() =>
+  menuItems.value
+    .filter(i => i.category === portionCategory.value)
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+)
+
+// Lokalne kopie per item
+const portionLocal = reactive({})
+const portionSaving = reactive({})
+const portionSaved  = reactive({})
+
+// Inicjalizuj portionLocal gdy item pojawia się w widoku
+watch(portionMenuItems, (items) => {
+  items.forEach(item => {
+    if (!portionLocal[item.id]) {
+      const cfg = portionConfig.value[item.id]
+      portionLocal[item.id] = {
+        mode:     cfg?.mode     ?? PORTION_MODE_COUNT,
+        portions: cfg?.portions ? [...cfg.portions] : [1],
+      }
+    }
+  })
+}, { immediate: true })
+
+// Synchronizuj gdy dane z bazy załadowane
+watch(portionConfig, (val) => {
+  Object.entries(val).forEach(([id, cfg]) => {
+    portionLocal[id] = {
+      mode:     cfg.mode     ?? PORTION_MODE_COUNT,
+      portions: cfg.portions ? [...cfg.portions] : [1],
+    }
+  })
+}, { deep: true })
+
+const portionSave = async (itemId) => {
+  portionSaving[itemId] = true
+  portionSaved[itemId]  = false
+  try {
+    const cfg = portionLocal[itemId]
+    await savePortionConfig(itemId, cfg.mode, cfg.mode === 'portions' ? cfg.portions : [])
+    portionSaved[itemId] = true
+    setTimeout(() => { portionSaved[itemId] = false }, 2000)
+  } catch (err) {
+    alert('Błąd zapisu: ' + err.message)
+  } finally {
+    portionSaving[itemId] = false
+  }
+}
+
 // Lokalne kopie list per kategoria — reactive (draggable mutuje je bezpośrednio)
 const localMenuLists = reactive({})
 const localExtrasLists = reactive({})
@@ -546,6 +682,7 @@ onMounted(() => {
   fetchExtras()
   fetchDailyMenu()
   fetchMatrix()
+  fetchPortionConfig()
 })
 
 
@@ -707,31 +844,43 @@ const executeDelete = async () => {
 }
 
 /* ===================== ZAKŁADKI ===================== */
+
 .tabs-bar {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin-top: 1rem;
-  margin-bottom: 0.25rem;
-  border-bottom: 2px solid var(--border-subtle);
-  padding-bottom: 0;
+  margin-bottom: 1rem;
+  background: #f1f5f9;
+  border-radius: 0.75rem;
+  padding: 0.35rem;
+  border: 1px solid #e2e8f0;
 }
 
 .tab-btn {
-  background: none;
+  background: transparent;
   border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  padding: 0.65rem 1.25rem;
-  font-size: 1rem;
+  padding: 0.55rem 1.15rem;
+  font-size: 0.92rem;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  color: var(--muted);
-  border-radius: 0.5rem 0.5rem 0 0;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  color: #64748b;
+  border-radius: 0.5rem;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
 }
-.tab-btn:hover { background: #f3f4f6; color: var(--text); }
-.tab-btn.active { color: var(--text); border-bottom-color: var(--orange); font-weight: 800; }
+.tab-btn:hover {
+  background: #fff;
+  color: #1e293b;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.tab-btn.active {
+  background: #fff;
+  color: var(--orange);
+  font-weight: 800;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+}
 
 
 /* ===================== PASEK AKCJI ===================== */
@@ -1251,4 +1400,103 @@ const executeDelete = async () => {
   font-size: 0.85rem;
   padding: 0.35rem 1.2rem;
 }
+
+/* ===================== PORCJE ===================== */
+.portion-cat-pill {
+  background: #f3f4f6;
+  border: 1.5px solid #e5e7eb;
+  color: #6b7280;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.portion-cat-pill:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.portion-cat-pill.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.portion-mode-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.portion-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  user-select: none;
+  color: #6b7280;
+}
+.portion-mode-option input[type="radio"] { display: none; }
+.portion-mode-option.active {
+  background: #d1fae5;
+  border-color: #10b981;
+  color: #065f46;
+}
+
+.portion-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.portion-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.45rem;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  user-select: none;
+}
+.portion-check-row:hover { background: #d1fae5; border-color: #6ee7b7; }
+.portion-check-row.checked { background: #d1fae5; border-color: #10b981; color: #065f46; font-weight: 700; }
+.portion-check-row input[type="checkbox"] {
+  accent-color: #10b981;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.btn-portion-save {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.btn-portion-save:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+.btn-portion-save:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

@@ -1,33 +1,6 @@
 /**
- * Shared order helpers — key generation, portion constants, category helpers.
+ * Shared order helpers — key generation, role routing.
  */
-
-// ---------------------------------------------------------------------------
-// Portion constants
-// ---------------------------------------------------------------------------
-
-export const PORTIONS_FULL = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół porcji', value: 0.5 },
-  { label: 'Półtora porcji', value: 1.5 },
-  { label: 'Podwójna porcja', value: 2 },
-]
-
-export const PORTIONS_HALF = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół porcji', value: 0.5 },
-]
-
-/** Items that always use count (never portion dialog) */
-export const PORTION_EXCLUDED = [
-  'barszcz czerwony',
-  'chłodnik',
-  'flaczki',
-  'żurek z kiełbaską',
-]
-
-/** Item name substrings that trigger the portion dialog */
-export const PORTION_INCLUDED_NAMES = ['naleśniki', 'pierogi']
 
 // ---------------------------------------------------------------------------
 // Role → route mapping (used in router & LoginView)

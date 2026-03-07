@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } fr
 const menuItems = ref([])
 const loading = ref(false)
 const error = ref(null)
+const initialized = ref(false)
 
 // Kategorie menu
 export const MENU_CATEGORIES = [
@@ -21,7 +22,8 @@ export const MENU_CATEGORIES = [
 
 export function useMenu() {
   // Pobierz menu z Firestore (bez orderBy - sortujemy po stronie klienta)
-  const fetchMenu = async () => {
+  const fetchMenu = async (force = false) => {
+    if (initialized.value && !force) return
     loading.value = true
     error.value = null
 
@@ -35,6 +37,7 @@ export function useMenu() {
 
       // Sortowanie po polu order (z fallbackiem na Infinity dla starych pozycji)
       menuItems.value.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+      initialized.value = true
     } catch (err) {
       error.value = err.message
       console.error('Błąd podczas pobierania menu:', err)
@@ -45,66 +48,78 @@ export function useMenu() {
 
   // Dodaj nową pozycję
   const addMenuItem = async (item) => {
-    loading.value = true
     error.value = null
-
+    // Optymistyczny update — tymczasowe ID
+    const tempId = '_tmp_' + Date.now()
+    const optimistic = {
+      id: tempId,
+      name: item.name.trim(),
+      price: Number(item.price),
+      category: item.category,
+      order: menuItems.value.length,
+      ...(item.category === 'napoje' ? { showInKitchen: item.showInKitchen ?? false } : {}),
+    }
+    menuItems.value = [...menuItems.value, optimistic]
     try {
       const docRef = await addDoc(collection(db, 'menu'), {
-        name: item.name.trim(),
-        price: Number(item.price),
-        category: item.category,
-        ...(item.category === 'napoje' ? { showInKitchen: item.showInKitchen ?? false } : {}),
+        name: optimistic.name,
+        price: optimistic.price,
+        category: optimistic.category,
+        ...(item.category === 'napoje' ? { showInKitchen: optimistic.showInKitchen } : {}),
       })
-
-      await fetchMenu()
+      // Zamień tymczasowy rekord na prawdziwy
+      menuItems.value = menuItems.value.map(m => m.id === tempId ? { ...optimistic, id: docRef.id } : m)
       return docRef.id
     } catch (err) {
+      // Rollback
+      menuItems.value = menuItems.value.filter(m => m.id !== tempId)
       error.value = err.message
-      console.error('Błąd podczas dodawania pozycji:', err)
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
   // Zaktualizuj pozycję
   const updateMenuItem = async (id, updates) => {
-    loading.value = true
     error.value = null
-
+    const prev = menuItems.value.find(m => m.id === id)
+    // Optymistyczny update
+    menuItems.value = menuItems.value.map(m =>
+      m.id === id ? {
+        ...m,
+        name: updates.name.trim(),
+        price: Number(updates.price),
+        category: updates.category,
+        ...(updates.category === 'napoje' ? { showInKitchen: updates.showInKitchen ?? false } : {}),
+      } : m
+    )
     try {
-      const itemRef = doc(db, 'menu', id)
-      await updateDoc(itemRef, {
+      await updateDoc(doc(db, 'menu', id), {
         name: updates.name.trim(),
         price: Number(updates.price),
         category: updates.category,
         ...(updates.category === 'napoje' ? { showInKitchen: updates.showInKitchen ?? false } : {}),
       })
-
-      await fetchMenu() // Odśwież listę
     } catch (err) {
+      // Rollback
+      if (prev) menuItems.value = menuItems.value.map(m => m.id === id ? prev : m)
       error.value = err.message
-      console.error('Błąd podczas aktualizacji pozycji:', err)
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
   // Usuń pozycję
   const deleteMenuItem = async (id) => {
-    loading.value = true
     error.value = null
-
+    const prev = menuItems.value.find(m => m.id === id)
+    // Optymistyczny update
+    menuItems.value = menuItems.value.filter(m => m.id !== id)
     try {
       await deleteDoc(doc(db, 'menu', id))
-      await fetchMenu() // Odśwież listę
     } catch (err) {
+      // Rollback
+      if (prev) menuItems.value = [...menuItems.value, prev]
       error.value = err.message
-      console.error('Błąd podczas usuwania pozycji:', err)
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
@@ -144,4 +159,3 @@ export function useMenu() {
     reorderMenuItems
   }
 }
-

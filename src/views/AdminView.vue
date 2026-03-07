@@ -202,7 +202,6 @@
                     </div>
                   </div>
                   <div class="history-order-items">
-                    <!-- Nowy format: osoby -->
                     <template v-if="order.persons && order.persons.length">
                       <div v-for="person in order.persons" :key="person.seat" class="history-person-block">
                         <span class="history-person-label">Osoba {{ person.seat }}</span>
@@ -214,13 +213,10 @@
                         </div>
                       </div>
                     </template>
-                    <!-- Stary format: płaska lista -->
                     <template v-else>
                       <div v-for="item in order.items" :key="item.name">
                         • {{ item.name }}
-                        <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">
-                          {{ item.count }}×
-                        </span>
+                        <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">{{ item.count }}×</span>
                         <span v-if="item.quantity && item.quantity !== 1">({{ formatQuantity(item.quantity) }})</span>
                         <span v-if="item.extras && item.extras.length"> + {{ item.extras.join(', ') }}</span>
                       </div>
@@ -231,6 +227,16 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Paginacja -->
+            <div v-if="hasMore" class="load-more-bar">
+              <button class="btn-load-more" @click="loadMoreOrders" :disabled="loadingMore">
+                {{ loadingMore ? 'Ładowanie…' : `Załaduj więcej (załadowano ${orders.length})` }}
+              </button>
+            </div>
+            <div v-else-if="orders.length >= PAGE_SIZE" class="load-more-bar muted">
+              Wszystkie zamówienia załadowane ({{ orders.length }})
             </div>
           </div>
 
@@ -439,7 +445,7 @@ import { computed, ref, reactive, onMounted } from 'vue'
 import { db } from '@/firebase'
 import { auth } from '@/firebase'
 import { useRouter } from 'vue-router'
-import { collection, getDocs, query, orderBy, limit, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, startAfter, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
 import { Bar } from 'vue-chartjs'
 import { useBackfillDate } from '@/composables/useBackfillDate'
@@ -681,31 +687,58 @@ onMounted(() => {
   fetchExtras()
   const currentUser = auth.currentUser
   if (currentUser?.email) {
-    getRoleForEmail(currentUser.email, currentUser.uid).then(role => {
-      userRole.value = role
-    })
+    getRoleForEmail(currentUser.email, currentUser.uid)
+      .then(role => { userRole.value = role })
+      .catch(err => console.error('Błąd pobierania roli:', err))
   }
 })
 
 // ==================== Data Fetching ====================
+const PAGE_SIZE = 100
+const lastDoc = ref(null)       // kursor do paginacji
+const hasMore = ref(false)      // czy jest więcej do załadowania
+const loadingMore = ref(false)
+
+const mapOrder = (d) => {
+  const data = d.data()
+  return {
+    id: d.id,
+    ...data,
+    createdAt: (data.createdAt && typeof data.createdAt.toDate === 'function')
+      ? data.createdAt.toDate()
+      : new Date()
+  }
+}
+
 const fetchData = async () => {
   const q = query(
     collection(db, 'orders'),
     orderBy('createdAt', 'desc'),
-    limit(500)
+    limit(PAGE_SIZE)
   )
-
   const snap = await getDocs(q)
-  orders.value = snap.docs.map((doc) => {
-    const data = doc.data()
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: (data.createdAt && typeof data.createdAt.toDate === 'function')
-        ? data.createdAt.toDate()
-        : new Date()
-    }
-  })
+  orders.value = snap.docs.map(mapOrder)
+  lastDoc.value = snap.docs[snap.docs.length - 1] ?? null
+  hasMore.value = snap.docs.length === PAGE_SIZE
+}
+
+const loadMoreOrders = async () => {
+  if (!lastDoc.value || loadingMore.value) return
+  loadingMore.value = true
+  try {
+    const q = query(
+      collection(db, 'orders'),
+      orderBy('createdAt', 'desc'),
+      startAfter(lastDoc.value),
+      limit(PAGE_SIZE)
+    )
+    const snap = await getDocs(q)
+    orders.value = [...orders.value, ...snap.docs.map(mapOrder)]
+    lastDoc.value = snap.docs[snap.docs.length - 1] ?? null
+    hasMore.value = snap.docs.length === PAGE_SIZE
+  } finally {
+    loadingMore.value = false
+  }
 }
 
 // ==================== Computed - Filtering ====================
@@ -1535,5 +1568,34 @@ const groupedOrders = computed(() => {
   font-size: 0.88rem;
   color: var(--text);
   padding: 0.05rem 0;
+}
+
+/* ===================== PAGINACJA ===================== */
+.load-more-bar {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem 0 0.5rem;
+}
+
+.btn-load-more {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  color: #475569;
+  padding: 0.6rem 1.5rem;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.btn-load-more:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.btn-load-more:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

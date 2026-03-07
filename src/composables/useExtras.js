@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } fr
 const extrasItems = ref([])
 const loading = ref(false)
 const error = ref(null)
+const initialized = ref(false)
 
 // Kategorie dodatków (extras)
 export const EXTRAS_CATEGORIES = [
@@ -13,7 +14,8 @@ export const EXTRAS_CATEGORIES = [
 ]
 
 export function useExtras() {
-  const fetchExtras = async () => {
+  const fetchExtras = async (force = false) => {
+    if (initialized.value && !force) return
     loading.value = true
     error.value = null
     try {
@@ -21,7 +23,8 @@ export function useExtras() {
       extrasItems.value = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(item => item.name)
-      extrasItems.value.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+        .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+      initialized.value = true
     } catch (err) {
       error.value = err.message
       console.error('Błąd podczas pobierania extras:', err)
@@ -31,53 +34,60 @@ export function useExtras() {
   }
 
   const addExtra = async (item) => {
-    loading.value = true
     error.value = null
+    const tempId = '_tmp_' + Date.now()
+    const optimistic = {
+      id: tempId,
+      name: item.name.trim(),
+      price: Number(item.price),
+      category: item.category,
+      order: extrasItems.value.length,
+    }
+    extrasItems.value = [...extrasItems.value, optimistic]
     try {
       const docRef = await addDoc(collection(db, 'extras'), {
-        name: item.name.trim(),
-        price: Number(item.price),
-        category: item.category,
+        name: optimistic.name,
+        price: optimistic.price,
+        category: optimistic.category,
       })
-      await fetchExtras()
+      extrasItems.value = extrasItems.value.map(e => e.id === tempId ? { ...optimistic, id: docRef.id } : e)
       return docRef.id
     } catch (err) {
+      extrasItems.value = extrasItems.value.filter(e => e.id !== tempId)
       error.value = err.message
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
   const updateExtra = async (id, updates) => {
-    loading.value = true
     error.value = null
+    const prev = extrasItems.value.find(e => e.id === id)
+    extrasItems.value = extrasItems.value.map(e =>
+      e.id === id ? { ...e, name: updates.name.trim(), price: Number(updates.price), category: updates.category } : e
+    )
     try {
       await updateDoc(doc(db, 'extras', id), {
         name: updates.name.trim(),
         price: Number(updates.price),
         category: updates.category,
       })
-      await fetchExtras()
     } catch (err) {
+      if (prev) extrasItems.value = extrasItems.value.map(e => e.id === id ? prev : e)
       error.value = err.message
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
   const deleteExtra = async (id) => {
-    loading.value = true
     error.value = null
+    const prev = extrasItems.value.find(e => e.id === id)
+    extrasItems.value = extrasItems.value.filter(e => e.id !== id)
     try {
       await deleteDoc(doc(db, 'extras', id))
-      await fetchExtras()
     } catch (err) {
+      if (prev) extrasItems.value = [...extrasItems.value, prev]
       error.value = err.message
       throw err
-    } finally {
-      loading.value = false
     }
   }
 
@@ -113,22 +123,10 @@ export function useExtras() {
     return map
   })
 
-  // Extras dla konkretnej kategorii menu
-  const extrasForCategory = (menuCategory) => {
-    // Wszystkie kategorie dań dostają pełną listę — i dodatki i opcje
-    const hasDishes = ['dania główne', 'danie dnia', 'zupy', 'zupa dnia', 'dodatki', 'surówki']
-    if (!hasDishes.includes(menuCategory)) return []
-    return extrasItems.value
-      .filter(e => e.category === 'dodatek' || e.category === 'opcja')
-      .slice()
-      .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
-  }
-
   return {
     extrasItems,
     extrasByCategory,
     extrasPriceMap,
-    extrasForCategory,
     loading,
     error,
     fetchExtras,
@@ -138,4 +136,3 @@ export function useExtras() {
     reorderExtras,
   }
 }
-
