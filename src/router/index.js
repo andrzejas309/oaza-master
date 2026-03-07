@@ -2,7 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { onAuthStateChanged, getAuth } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/firebase'
-import '../firebase'
+import { ROLE_ROUTES } from '@/utils/orderHelpers'
 
 const LoginView        = () => import('../views/LoginView.vue')
 const ObslugaView      = () => import('../views/ObslugaView.vue')
@@ -130,8 +130,7 @@ router.beforeEach(async (to, from, next) => {
     // Admin może wejść wszędzie
     if (required && role !== required && role !== 'admin') {
         // Przekieruj do widoku wynikającego z własnej roli
-        const roleRoutes = { obsluga: '/obsluga', kuchnia: '/kuchnia', admin: '/admin' }
-        return next(roleRoutes[role] ?? '/login')
+        return next(ROLE_ROUTES[role] ?? '/login')
     }
 
     next()

@@ -17,7 +17,7 @@
 
     <div class="admin-layout">
 
-      <DateFilterBar @change="onFilterChange" />
+      <DateFilterBar @change="filter = $event" />
 
       <!-- Przycisk Historia zamówień -->
       <section style="margin-top: 1rem;">
@@ -434,8 +434,7 @@
  */
 
 import { computed, ref, reactive, onMounted } from 'vue'
-import { signOut } from 'firebase/auth'
-import { auth, db } from '@/firebase'
+import { db } from '@/firebase'
 import { useRouter } from 'vue-router'
 import { collection, getDocs, query, orderBy, limit, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
@@ -443,9 +442,12 @@ import { Bar } from 'vue-chartjs'
 import { useBackfillDate } from '@/composables/useBackfillDate'
 import { useMenu } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
-import { clearRoleCache } from '@/router'
+import { useAuth } from '@/composables/useAuth'
+import { generateItemKey } from '@/utils/orderHelpers'
+import { formatQuantity, formatOrderTime } from '@/utils/formatters'
 
 const router = useRouter()
+const { logout } = useAuth()
 const orders = ref([])
 const filter = ref({ mode: 'day', date: null, month: null, year: null })
 const showAllItemsDialog = ref(false)
@@ -456,7 +458,6 @@ const showBackfillPicker = ref(false)
 const { menuItems, fetchMenu } = useMenu()
 const { extrasPriceMap, fetchExtras } = useExtras()
 const menu = computed(() => menuItems.value)
-const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki', 'surówki', 'napoje', 'składniki']
 
 // ==================== Edycja zamówienia (z historii) ====================
 const editOrderDialog = ref(null)        // { order }
@@ -476,12 +477,6 @@ const editOrderSaving = ref(false)
 const editPersons = ref([reactive({ items: {} })])
 const editActiveSeat = ref(0)
 
-const generateItemKey = (name, quantity = 1, extras = []) => {
-  let key = name
-  if (quantity !== 1) key += `|q${quantity}`
-  if (extras?.length) key += `|${[...extras].sort().join(',')}`
-  return key
-}
 
 // Person helpers
 const editCurrentDraft = computed(() => editPersons.value[editActiveSeat.value] || editPersons.value[0])
@@ -680,19 +675,7 @@ onMounted(() => {
   fetchExtras()
 })
 
-// ==================== Auth ====================
-const logout = async () => {
-  clearRoleCache()
-  await signOut(auth)
-  router.replace('/login')
-}
-
 // ==================== Data Fetching ====================
-const onFilterChange = (f) => {
-  filter.value = f
-  // Filtrowanie odbywa się automatycznie przez computed property filteredOrders
-}
-
 const fetchData = async () => {
   const q = query(
     collection(db, 'orders'),
@@ -706,7 +689,9 @@ const fetchData = async () => {
     return {
       id: doc.id,
       ...data,
-      createdAt: data.createdAt?.toDate?.() || new Date()
+      createdAt: (data.createdAt && typeof data.createdAt.toDate === 'function')
+        ? data.createdAt.toDate()
+        : new Date()
     }
   })
 }
@@ -944,30 +929,7 @@ const groupedOrders = computed(() => {
 })
 
 
-const formatOrderTime = (date) => {
-  if (!date) return ''
-  return date.toLocaleString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
-const formatQuantity = (qty) => {
-  if (qty === 0.5) return '½ porcji'
-  if (qty === 1) return '1 porcja'
-  if (qty === 1.5) return '1½ porcji'
-  if (qty === 2) return '2 porcje'
-  if (qty % 1 === 0) return `${qty} porcji`
-
-  // Dla golonki (gramatury)
-  const grams = Math.round(qty * 100)
-  if (grams >= 100) return `${grams}g`
-
-  return qty.toString()
-}
 
 
 </script>

@@ -213,17 +213,15 @@
  */
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { signOut } from 'firebase/auth'
-import { auth } from '@/firebase'
 import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
 import { useExtras, EXTRAS_CATEGORIES } from '@/composables/useExtras'
+import { useAuth } from '@/composables/useAuth'
 import draggable from 'vuedraggable'
-import { clearRoleCache } from '@/router'
 
 const router = useRouter()
+const { logout } = useAuth()
 
-const {
-  menuItems, menuByCategory,
+const {  menuItems, menuByCategory,
   loading: menuLoading, error: menuError,
   fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, reorderMenuItems
 } = useMenu()
@@ -272,12 +270,6 @@ onMounted(() => {
   fetchExtras()
 })
 
-// ==================== Auth ====================
-const logout = async () => {
-  clearRoleCache()
-  await signOut(auth)
-  router.replace('/login')
-}
 
 // ==================== Dialog Management ====================
 const openAddDialog = (mode) => {
@@ -708,4 +700,3 @@ const executeDelete = async () => {
   .tabs-bar { overflow-x: auto; }
 }
 </style>
-

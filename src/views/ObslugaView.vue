@@ -300,7 +300,6 @@
  */
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { auth, db } from '@/firebase'
-import { signOut } from 'firebase/auth'
 import {
   collection,
   addDoc,
@@ -311,12 +310,16 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
-import { useMenu } from '@/composables/useMenu'
+import { useMenu, MENU_CATEGORIES } from '@/composables/useMenu'
 import { useExtras } from '@/composables/useExtras'
 import { useBackfillDate } from '@/composables/useBackfillDate'
-import { getRoleForEmail, clearRoleCache } from '@/router'
+import { useAuth } from '@/composables/useAuth'
+import { getRoleForEmail } from '@/router'
+import { generateItemKey, PORTIONS_FULL, PORTIONS_HALF, PORTION_EXCLUDED, PORTION_INCLUDED_NAMES } from '@/utils/orderHelpers'
+import { formatPortionLabel, formatTime } from '@/utils/formatters'
 
 const router = useRouter()
+const { logout } = useAuth()
 
 const { menuItems, fetchMenu } = useMenu()
 const menu = computed(() => menuItems.value)
@@ -325,19 +328,9 @@ const { isActive: backfillActive, label: backfillLabel, getEffectiveDate } = use
 
 const MAX_ORDERS_DISPLAY = 8
 
-const PORTIONS_FULL = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół', value: 0.5 },
-  { label: 'Półtora', value: 1.5 },
-  { label: 'Podwójna', value: 2 },
-]
-const PORTIONS_HALF = [
-  { label: 'Cała porcja', value: 1 },
-  { label: 'Pół', value: 0.5 },
-]
-const portionExcluded = ['barszcz czerwony', 'chłodnik', 'flaczki', 'żurek z kiełbaską']
-const portionIncludedNames = ['naleśniki', 'pierogi']
-const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki', 'surówki', 'napoje', 'składniki']
+// Lista kategorii do zakładek menu (wartości string)
+const categoryList = MENU_CATEGORIES.map(c => c.value)
+
 
 // ==================== State ====================
 const showForm = ref(false)
@@ -467,12 +460,6 @@ const filteredMenu = computed(() => {
 })
 
 // ==================== Helper Functions ====================
-const generateItemKey = (name, quantity = 1, extras = []) => {
-  let key = name
-  if (quantity !== 1) key += `|q${quantity}`
-  if (extras && extras.length > 0) key += `|${[...extras].sort().join(',')}`
-  return key
-}
 
 const ensureEntry = (name, quantity = 1, extras = []) => {
   const key = generateItemKey(name, quantity, extras)
@@ -519,17 +506,6 @@ const canEditItem = (orderItem) => {
   return ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki'].includes(base.category)
 }
 
-const formatPortionLabel = (val, itemName) => {
-  if (val == null) return '1 porcja'
-  if (itemName === 'golonka') return `${Math.round(val * 100)}g`
-  const labels = { 1: 'cała porcja', 0.5: '½ porcji', 1.5: '1 ½ porcji', 2: 'podwójna porcja' }
-  return labels[val] || `${val} porcji`
-}
-
-const formatTime = (ts) => {
-  if (!ts?.seconds) return ''
-  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
-}
 
 // ==================== Order Item Management ====================
 const increase = (item) => {
@@ -537,14 +513,14 @@ const increase = (item) => {
     gramDialogItem.value = item; gramValue.value = ''; gramDialogOpen.value = true; return
   }
   const portionCategories = ['zupy', 'zupa dnia', 'dodatki', 'surówki']
-  if (portionExcluded.includes(item.name)) {
+  if (PORTION_EXCLUDED.includes(item.name)) {
     const key = generateItemKey(item.name, 1, [])
     if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
     else ensureEntry(item.name, 1, [])
     return
   }
   const nameLC = item.name.toLowerCase()
-  const isPortionName = portionIncludedNames.some(n => nameLC.includes(n))
+  const isPortionName = PORTION_INCLUDED_NAMES.some(n => nameLC.includes(n))
   if (portionCategories.includes(item.category) || isPortionName) {
     PORTIONS.value = ['dodatki', 'surówki'].includes(item.category) ? PORTIONS_HALF : PORTIONS_FULL
     portionDialogItem.value = item; portionDialogOpen.value = true; return
@@ -753,31 +729,9 @@ const saveOrder = async (tableNum = null) => {
 const markAsReady = async (order) => {
   await updateDoc(doc(db, 'orders', order.id), { status: 'gotowe' })
 }
-
-// ==================== Auth ====================
-const logout = async () => {
-  clearRoleCache()
-  await signOut(auth)
-  router.replace('/login')
-}
 </script>
 
 <style scoped>
-/* ===================== ZMIENNE ===================== */
-:root {
-  --green: #2f9e44;
-  --green-dark: #2b8a3e;
-  --green-soft: #d3f9d8;
-  --orange: #ff8a3c;
-  --orange-dark: #e67700;
-  --orange-soft: #ffe8d5;
-  --bg: #fff7f0;
-  --card: #ffffff;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --border-subtle: #e5e7eb;
-  --radius: 1rem;
-}
 
 /* ===================== ROOT ===================== */
 .obsluga-root {

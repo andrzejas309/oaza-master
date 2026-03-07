@@ -109,15 +109,16 @@
  */
 
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { auth, db } from '@/firebase'
-import { signOut } from 'firebase/auth'
+import { db } from '@/firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
-import { clearRoleCache } from '@/router'
+import { useAuth } from '@/composables/useAuth'
+import { formatTime } from '@/utils/formatters'
+import { formatPortionPrefix } from '@/utils/formatters'
 
 const router = useRouter()
+const { logout } = useAuth()
 const orders = ref([])
-const summary = ref({})
 const now = ref(Date.now())
 
 let unsub = null
@@ -135,14 +136,6 @@ onMounted(() => {
   unsub = onSnapshot(q, (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     orders.value = all.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
-
-    // Zliczanie ilości pozycji
-    summary.value = all.reduce((acc, order) => {
-      (order.items || []).forEach(item => {
-        acc[item.name] = (acc[item.name] || 0) + (item.quantity || 0)
-      })
-      return acc
-    }, {})
   })
 })
 
@@ -152,54 +145,33 @@ onUnmounted(() => {
 })
 
 // ==================== Auth ====================
-const logout = async () => {
-  clearRoleCache()
-  await signOut(auth)
-  router.replace('/login')
-}
+// logout provided by useAuth()
 
 // ==================== Helpers ====================
 const orderTypeClass = (order) => {
   const type = (order.place || order.type || '').toLowerCase()
-
   if (type.includes('miejs')) return 'k-type-namiejscu'
   if (type.includes('wynos')) return 'k-type-nawynos'
   if (type.includes('dostaw')) return 'k-type-dostawa'
-
   return 'order-top-default'
 }
-
-const formatTime = (ts) => {
-  if (!ts?.seconds) return ''
-  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 
 const filterKitchenItems = (items) => {
   if (!items) return []
   return items.filter(item => {
-    // Napoje: pokazuj tylko jeśli showInKitchen === true
     if (item.category === 'napoje') return item.showInKitchen === true
     return true
   })
 }
 
-const formatPortionPrefix = (val, itemName) => {  if (!val || val === 1) return null
-  if (itemName === 'golonka') return `${Math.round(val * 100)}g`
-  const labels = { 0.5: '½×', 1.5: '1½×', 2: '2×', 3: '3×' }
-  return labels[val] || `${val}×`
-}
-
 const currentTime = computed(() => {
   return new Date(now.value).toLocaleTimeString('pl-PL', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
 })
 
-const formatElapsed = (ts) => {  if (!ts?.seconds) return '00:00'
+const formatElapsed = (ts) => {
+  if (!ts?.seconds) return '00:00'
   const elapsed = Math.floor((now.value - ts.seconds * 1000) / 1000)
   if (elapsed < 0) return '00:00'
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0')
@@ -217,17 +189,6 @@ const elapsedClass = (ts) => {
 </script>
 
 <style scoped>
-/* ===================== ZMIENNE ===================== */
-:root {
-  --green-dark: #2b8a3e;
-  --orange: #ff8a3c;
-  --orange-dark: #e67700;
-  --orange-soft: #ffe8d5;
-  --text: #111827;
-  --muted: #6b7280;
-  --border-subtle: #e5e7eb;
-  --radius: 1rem;
-}
 
 /* ===================== ROOT ===================== */
 .kuchnia-root {
