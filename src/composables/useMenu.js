@@ -52,10 +52,11 @@ export function useMenu() {
       const docRef = await addDoc(collection(db, 'menu'), {
         name: item.name.trim(),
         price: Number(item.price),
-        category: item.category
+        category: item.category,
+        ...(item.category === 'napoje' ? { showInKitchen: item.showInKitchen ?? false } : {}),
       })
 
-      await fetchMenu() // Odśwież listę
+      await fetchMenu()
       return docRef.id
     } catch (err) {
       error.value = err.message
@@ -76,7 +77,8 @@ export function useMenu() {
       await updateDoc(itemRef, {
         name: updates.name.trim(),
         price: Number(updates.price),
-        category: updates.category
+        category: updates.category,
+        ...(updates.category === 'napoje' ? { showInKitchen: updates.showInKitchen ?? false } : {}),
       })
 
       await fetchMenu() // Odśwież listę

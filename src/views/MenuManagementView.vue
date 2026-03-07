@@ -58,6 +58,12 @@
               <template #item="{ element: item, index }">
                 <li class="item-row item-row--draggable">
                   <span class="item-num">{{ index + 1 }}</span>
+                  <span
+                    v-if="category.value === 'napoje'"
+                    class="kitchen-dot"
+                    :class="item.showInKitchen ? 'kitchen-dot--on' : 'kitchen-dot--off'"
+                    :title="item.showInKitchen ? 'Widoczny na paragonach kuchni' : 'Ukryty na paragonach kuchni'"
+                  ></span>
                   <span class="item-name">{{ item.name }}</span>
                   <span class="item-price">{{ item.price }} zł</span>
                   <div class="item-actions">
@@ -156,6 +162,12 @@
                   {{ cat.label }}
                 </option>
               </select>
+            </div>
+            <div v-if="formData.category === 'napoje'" class="form-group form-group--checkbox">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="formData.showInKitchen" />
+                <span>Pokazuj na paragonach kuchni</span>
+              </label>
             </div>
             <div class="form-actions">
               <button type="button" class="btn-secondary-form" @click="closeDialog">Anuluj</button>
@@ -272,7 +284,7 @@ const openAddDialog = (mode) => {
   dialogMode.value = mode
   editMode.value = false
   editingId.value = null
-  formData.value = { name: '', price: mode === 'extras' ? 0 : '', category: '' }
+  formData.value = { name: '', price: mode === 'extras' ? 0 : '', category: '', showInKitchen: false }
   dialogOpen.value = true
 }
 
@@ -280,7 +292,7 @@ const openEditDialog = (mode, item) => {
   dialogMode.value = mode
   editMode.value = true
   editingId.value = item.id
-  formData.value = { name: item.name, price: item.price, category: item.category }
+  formData.value = { name: item.name, price: item.price, category: item.category, showInKitchen: item.showInKitchen ?? false }
   dialogOpen.value = true
 }
 
@@ -354,17 +366,23 @@ const onExtrasDragEnd = async (evt, targetCategory) => {
 const saveItem = async () => {
   if (!formData.value.name || formData.value.price === '' || !formData.value.category) return
   saving.value = true
-  // Normalizuj nazwę do małych liter
   formData.value.name = formData.value.name.trim().toLowerCase()
+  // showInKitchen dotyczy tylko napojów, reszta zawsze pokazywana
+  const payload = {
+    name: formData.value.name,
+    price: formData.value.price,
+    category: formData.value.category,
+    ...(formData.value.category === 'napoje' ? { showInKitchen: formData.value.showInKitchen } : {}),
+  }
   try {
     if (dialogMode.value === 'menu') {
       editMode.value
-        ? await updateMenuItem(editingId.value, formData.value)
-        : await addMenuItem(formData.value)
+        ? await updateMenuItem(editingId.value, payload)
+        : await addMenuItem(payload)
     } else {
       editMode.value
-        ? await updateExtra(editingId.value, formData.value)
-        : await addExtra(formData.value)
+        ? await updateExtra(editingId.value, payload)
+        : await addExtra(payload)
     }
     closeDialog()
   } catch (err) {
@@ -646,6 +664,41 @@ const executeDelete = async () => {
 
 /* ===================== MISC ===================== */
 .empty-category { font-style: italic; text-align: center; padding: 0.75rem 0; color: var(--muted); font-size: 0.9rem; }
+
+.kitchen-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid #d1d5db;
+}
+.kitchen-dot--on  { background: #16a34a; border-color: #16a34a; }
+.kitchen-dot--off { background: #ffffff; border-color: #d1d5db; }
+
+.form-group--checkbox {  padding: 0.5rem 0.75rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 0.65rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #166534;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #16a34a;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 .delete-confirm-text { color: #374151; line-height: 1.6; margin-bottom: 1.5rem; }
 
 /* ===================== RESPONSIVE ===================== */

@@ -150,7 +150,16 @@
       <div class="dialog-panel dialog-panel--wide">
         <div class="dialog-panel-header">
           <h2 class="dialog-panel-title">Historia zamówień</h2>
-          <button class="dialog-close-btn" @click="showHistoryDialog = false">✖</button>
+          <div class="history-header-actions">
+            <label class="delete-toggle" :class="{ active: deleteMode }">
+              <input type="checkbox" v-model="deleteMode" />
+              <span class="delete-toggle-track">
+                <span class="delete-toggle-thumb"></span>
+              </span>
+              <span class="delete-toggle-label">{{ deleteMode ? '🗑 Tryb usuwania ON' : 'Tryb usuwania' }}</span>
+            </label>
+            <button class="dialog-close-btn" @click="showHistoryDialog = false; deleteMode = false">✖</button>
+          </div>
         </div>
         <div class="dialog-panel-body">
 
@@ -187,6 +196,7 @@
                       <span class="history-order-total">{{ calculateOrderTotal(order).toFixed(2) }} zł</span>
                       <button class="btn-edit-order" @click.stop="openEditOrderDialog(order)" title="Edytuj zamówienie">✏️</button>
                       <button class="btn-edit-date" @click.stop="openEditDateDialog(order)" title="Zmień datę zamówienia">📅</button>
+                      <button v-if="deleteMode" class="btn-delete-order" @click.stop="deleteOrder(order)" title="Usuń zamówienie">🗑</button>
                     </div>
                   </div>
                   <div class="history-order-items">
@@ -427,7 +437,7 @@ import { computed, ref, reactive, onMounted } from 'vue'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/firebase'
 import { useRouter } from 'vue-router'
-import { collection, getDocs, query, orderBy, limit, updateDoc, doc, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore'
 import DateFilterBar from '../components/DateFilterBar.vue'
 import { Bar } from 'vue-chartjs'
 import { useBackfillDate } from '@/composables/useBackfillDate'
@@ -450,6 +460,13 @@ const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'doda
 
 // ==================== Edycja zamówienia (z historii) ====================
 const editOrderDialog = ref(null)        // { order }
+const deleteMode = ref(false)
+
+const deleteOrder = async (order) => {
+  if (!confirm(`Usunąć zamówienie #${order.number}? Tej operacji nie można cofnąć.`)) return
+  await deleteDoc(doc(db, 'orders', order.id))
+  orders.value = orders.value.filter(o => o.id !== order.id)
+}
 const editOrderType = ref(null)
 const editOrderContainers = ref(0)
 const editOrderCategory = ref('zupy')
@@ -1397,6 +1414,69 @@ const formatQuantity = (qty) => {
   background: #fef3c7;
   border-color: #f59e0b;
 }
+
+/* Przycisk usuwania zamówienia */
+.btn-delete-order {
+  background: #fee2e2;
+  border: 1.5px solid #fca5a5;
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.btn-delete-order:hover { background: #fecaca; border-color: #f87171; }
+
+/* Header historii z przełącznikiem */
+.history-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Toggle switch */
+.delete-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.delete-toggle input { display: none; }
+
+.delete-toggle-track {
+  position: relative;
+  width: 2.4rem;
+  height: 1.3rem;
+  background: #d1d5db;
+  border-radius: 9999px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.delete-toggle.active .delete-toggle-track { background: #ef4444; }
+
+.delete-toggle-thumb {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  background: #fff;
+  border-radius: 9999px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.delete-toggle.active .delete-toggle-thumb { transform: translateX(1.1rem); }
+
+.delete-toggle-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.delete-toggle.active .delete-toggle-label { color: #dc2626; }
 
 .edit-date-fields {
   display: grid;

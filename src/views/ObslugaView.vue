@@ -139,7 +139,7 @@
           </div>
 
           <div class="order-actions">
-            <button class="btn-sage btn-large" @click="saveOrder" :disabled="totalItemCount === 0 || saving || !selectedOrderType">
+            <button class="btn-sage btn-large" @click="openTableDialog" :disabled="totalItemCount === 0 || saving || !selectedOrderType">
               ✅ {{ saving ? 'Zapisywanie…' : (editingOrderId ? 'Zaktualizuj zamówienie' : 'Zapisz zamówienie') }}
             </button>
           </div>
@@ -156,7 +156,9 @@
           <div v-for="order in ordersOnSite" :key="order.id" class="order-card">
             <div class="order-info">
               <div class="order-number">
-                <span class="order-num-badge">#{{ order.number }}</span>
+                <span class="order-num-badge">
+                  {{ order.table ? '🪑 Stolik ' + order.table : '🪑 —' }}
+                </span>
                 <span class="order-time">{{ formatTime(order.createdAt) }}</span>
               </div>
               <!-- Nowy format: osoby -->
@@ -263,6 +265,31 @@
         <button class="btn-sage btn-large" @click="confirmGramAmount">Zatwierdź</button>
       </div>
     </div>
+
+    <!-- DIALOG: NUMER STOLIKA -->
+    <div v-if="tableDialogOpen" class="dialog-backdrop">
+      <div class="table-dialog">
+        <div class="table-dialog-icon">🪑</div>
+        <h2 class="table-dialog-title">Numer stolika</h2>
+        <p class="table-dialog-hint">{{ editingOrderId ? 'Zmień numer stolika' : 'Przy którym stoliku siedzą goście?' }}</p>
+        <input
+          ref="tableInputRef"
+          type="number"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          v-model="tableNumber"
+          placeholder="—"
+          min="1"
+          step="1"
+          class="table-dialog-input"
+          @keyup.enter="confirmTableNumber"
+        />
+        <div class="table-dialog-actions">
+          <button class="table-dialog-btn table-dialog-btn--cancel" @click="tableDialogOpen = false">Anuluj</button>
+          <button class="table-dialog-btn table-dialog-btn--confirm" @click="confirmTableNumber">Zapisz</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -271,7 +298,7 @@
  * AI: Vue component should contain only presentation logic.
  * Move business logic to composables.
  */
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import {
@@ -338,6 +365,11 @@ const extrasOptions = ref([])
 const gramDialogOpen = ref(false)
 const gramDialogItem = ref(null)
 const gramValue = ref('')
+
+// Dialog stolika
+const tableDialogOpen = ref(false)
+const tableNumber = ref('')
+const tableInputRef = ref(null)
 
 let unsub = null
 
@@ -576,13 +608,23 @@ const saveExtras = () => {
   const item = extrasDialogItem.value
   if (!item) return
   const oldKey = extrasDialogItemKey.value
-  const oldEntry = currentDraft.value.items[oldKey]
+  const draft = currentDraft.value
+  const oldEntry = draft.items[oldKey]
   if (!oldEntry) return
   const newExtras = [...extrasSelected.value]
   const newKey = generateItemKey(item.name, oldEntry.quantity, newExtras)
+
   if (oldKey !== newKey) {
-    currentDraft.value.items[newKey] = { name: item.name, quantity: oldEntry.quantity, count: oldEntry.count, extras: newExtras }
-    delete currentDraft.value.items[oldKey]
+    // Odbuduj obiekt zachowując kolejność — zastąp stary klucz nowym w tym samym miejscu
+    const rebuilt = {}
+    for (const [k, v] of Object.entries(draft.items)) {
+      if (k === oldKey) {
+        rebuilt[newKey] = { name: item.name, quantity: oldEntry.quantity, count: oldEntry.count, extras: newExtras }
+      } else {
+        rebuilt[k] = v
+      }
+    }
+    draft.items = rebuilt
   } else {
     oldEntry.extras = newExtras
   }
@@ -630,6 +672,7 @@ const startEditOrder = (order) => {
   activeSeat.value = 0
   selectedOrderType.value = order.type
   containerCount.value = order.containers || 0
+  tableNumber.value = order.table ? String(order.table) : ''
   editingOrderId.value = order.id
   showForm.value = true
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -639,26 +682,66 @@ const startEditOrder = (order) => {
 const buildPersonsPayload = () => {
   return persons.value.map((_, idx) => ({
     seat: idx + 1,
-    items: getPersonItems(idx).map(item => ({
-      name: item.name, quantity: item.quantity, count: item.count, extras: item.extras, finalPrice: item.finalPrice,
-    }))
+    items: getPersonItems(idx).map(item => {
+      const menuItem = menu.value.find(m => m.name === item.name)
+      return {
+        name: item.name,
+        quantity: item.quantity,
+        count: item.count,
+        extras: item.extras,
+        finalPrice: item.finalPrice,
+        category: menuItem?.category ?? null,
+        showInKitchen: menuItem?.showInKitchen ?? null,
+      }
+    })
   })).filter(p => p.items.length > 0)
 }
 
-const saveOrder = async () => {
+// ==================== Dialog stolika ====================
+const openTableDialog = () => {
+  // Na wynos — nie pytamy o stolik
+  if (selectedOrderType.value === 'na_wynos') {
+    saveOrder(null)
+    return
+  }
+  // Edycja lub nowe zamówienie na miejscu — pokazuj popup
+  // tableNumber jest już wypełniony z startEditOrder (jeśli edycja)
+  tableDialogOpen.value = true
+  nextTick(() => {
+    tableInputRef.value?.focus()
+    tableInputRef.value?.select()
+  })
+}
+
+const confirmTableNumber = () => {
+  const num = parseInt(tableNumber.value)
+  // Dla edycji — stolik jest opcjonalny (może pozostać null)
+  // Dla nowego zamówienia na miejscu — wymagamy numeru
+  if (!editingOrderId.value && (!num || num <= 0)) {
+    tableInputRef.value?.focus()
+    return
+  }
+  tableDialogOpen.value = false
+  saveOrder(num > 0 ? num : null)
+}
+
+const saveOrder = async (tableNum = null) => {
   if (totalItemCount.value === 0) return
   saving.value = true
   const personsPayload = buildPersonsPayload()
   const flatItems = personsPayload.flatMap(p => p.items)
   if (editingOrderId.value) {
     await updateDoc(doc(db, 'orders', editingOrderId.value), {
-      persons: personsPayload, items: flatItems, containers: containerCount.value, type: selectedOrderType.value, edited: true,
+      persons: personsPayload, items: flatItems, containers: containerCount.value,
+      type: selectedOrderType.value, edited: true,
+      table: tableNum ?? null,
     })
   } else {
     const effectiveDate = getEffectiveDate()
     await addDoc(collection(db, 'orders'), {
       number: Date.now(), persons: personsPayload, items: flatItems, containers: containerCount.value,
       type: selectedOrderType.value, status: 'w_toku',
+      ...(tableNum ? { table: tableNum } : {}),
       createdAt: effectiveDate ? Timestamp.fromDate(effectiveDate) : serverTimestamp(),
       ...(effectiveDate ? { backfilled: true } : {}),
     })
@@ -1249,6 +1332,98 @@ button[disabled] {
 .gram-input::-webkit-outer-spin-button,
 .gram-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .gram-input[type=number] { -moz-appearance: textfield; }
+
+/* ===================== DIALOG STOLIKA ===================== */
+.table-dialog {
+  background: #fff;
+  border-radius: 1.25rem;
+  padding: 2rem 2rem 1.75rem;
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+  text-align: center;
+}
+
+.table-dialog-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+}
+
+.table-dialog-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #111827;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.table-dialog-hint {
+  font-size: 0.88rem;
+  color: #6b7280;
+  margin: 0 0 0.5rem;
+}
+
+.table-dialog-input {
+  width: 100%;
+  font-size: 3rem;
+  font-weight: 900;
+  text-align: center;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.85rem;
+  padding: 0.65rem 0.5rem;
+  color: #111827;
+  background: #f9fafb;
+  outline: none;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -moz-appearance: textfield;
+}
+.table-dialog-input::-webkit-outer-spin-button,
+.table-dialog-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.table-dialog-input:focus {
+  border-color: #ff8a3c;
+  box-shadow: 0 0 0 3px #ffe8d5;
+  background: #fff;
+}
+.table-dialog-input::placeholder { color: #d1d5db; font-weight: 400; }
+
+.table-dialog-actions {
+  display: flex;
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.table-dialog-btn {
+  flex: 1;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.8rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.15s;
+}
+.table-dialog-btn:hover { filter: brightness(0.94); }
+
+.table-dialog-btn--cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1.5px solid #e5e7eb;
+}
+
+.table-dialog-btn--confirm {
+  background: #8fbc8f;
+  color: #1a3a1a;
+  flex: 2;
+}
 
 /* ===================== TYPOGRAFIA ===================== */
 .section-title { font-weight: 800; margin: 0 0 0.4rem; color: var(--green-dark); font-size: 1.05rem; }

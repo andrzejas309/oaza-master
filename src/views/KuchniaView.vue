@@ -15,6 +15,11 @@
     </header>
 
     <div class="kuchnia-layout">
+      <!-- ZEGAR -->
+      <div class="kitchen-clock">
+        {{ currentTime.slice(0, 5) }}<span class="clock-seconds">:{{ currentTime.slice(6) }}</span>
+      </div>
+
       <div class="main-layout">
 
         <!-- LEWA – ZAMÓWIENIA -->
@@ -24,9 +29,12 @@
 
               <!-- nagłówek karty -->
               <div class="order-top" :class="orderTypeClass(order)">
-                <div class="order-number">
-                  <span class="order-num-badge">#{{ order.number }}</span>
-                  <span v-if="order.edited" class="edited-badge">EDITED</span>
+                <div class="order-top-row">
+                  <div class="order-number">
+                    <span class="order-num-badge">{{ order.table ? 'Stolik: ' + order.table : String(order.number).slice(-5) }}</span>
+                    <span v-if="order.edited" class="edited-badge">EDITED</span>
+                  </div>
+                  <span class="order-timer" :class="elapsedClass(order.createdAt)">⏱ {{ formatElapsed(order.createdAt) }}</span>
                 </div>
                 <div class="order-meta">
                   {{ formatTime(order.createdAt) }}
@@ -42,13 +50,15 @@
                   <div v-for="person in order.persons" :key="person.seat" class="person-block">
                     <div class="person-block-header">Osoba {{ person.seat }}</div>
                     <ol class="order-items">
-                      <li v-for="(item, i) in person.items" :key="item.name + i" class="order-item-line">
-                        <span class="item-num">{{ i + 1 }}.</span>
-                        <span class="item-name">
-                          {{ item.count && item.count > 1 ? item.count + '× ' : '' }}{{ item.name }}
-                        </span>
-                        <span v-if="item.quantity && item.quantity !== 1" class="item-portion">({{ formatPortionLabel(item.quantity, item.name) }})</span>
-                        <span v-if="item.extras && item.extras.length" class="item-extras">+ {{ item.extras.join(', ') }}</span>
+                      <li v-for="(item, i) in filterKitchenItems(person.items)" :key="item.name + i" class="order-item-line">
+                        <div class="order-item-main">
+                          <span class="item-num">•</span>
+                          <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatPortionPrefix(item.quantity, item.name) }}</span>
+                          <span class="item-name">{{ item.name }}</span>
+                        </div>
+                        <div v-if="item.extras && item.extras.length" class="item-extras-list">
+                          <span v-for="extra in item.extras" :key="extra" class="item-extras">+ {{ extra }}</span>
+                        </div>
                       </li>
                     </ol>
                   </div>
@@ -56,9 +66,12 @@
                 <!-- Stary format: płaska lista -->
                 <template v-else>
                   <ol class="order-items">
-                    <li v-for="(item, i) in order.items" :key="item.name + i" class="order-item-line">
-                      <span class="item-num">{{ i + 1 }}.</span>
-                      <span class="item-name">{{ item.count && item.count > 1 ? item.count + '× ' : '' }}{{ item.name }}</span>
+                    <li v-for="(item, i) in filterKitchenItems(order.items)" :key="item.name + i" class="order-item-line">
+                      <div class="order-item-main">
+                        <span class="item-num">•</span>
+                        <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatPortionPrefix(item.quantity, item.name) }}</span>
+                        <span class="item-name">{{ item.name }}</span>
+                      </div>
                     </li>
                   </ol>
                 </template>
@@ -95,7 +108,7 @@
  * Move business logic to composables.
  */
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { auth, db } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
@@ -105,11 +118,15 @@ import { clearRoleCache } from '@/router'
 const router = useRouter()
 const orders = ref([])
 const summary = ref({})
+const now = ref(Date.now())
 
 let unsub = null
+let ticker = null
 
 // ==================== Lifecycle ====================
 onMounted(() => {
+  ticker = setInterval(() => { now.value = Date.now() }, 1000)
+
   const q = query(
     collection(db, 'orders'),
     where('status', '==', 'w_toku')
@@ -117,7 +134,7 @@ onMounted(() => {
 
   unsub = onSnapshot(q, (snap) => {
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    orders.value = all
+    orders.value = all.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
 
     // Zliczanie ilości pozycji
     summary.value = all.reduce((acc, order) => {
@@ -131,6 +148,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsub) unsub()
+  if (ticker) clearInterval(ticker)
 })
 
 // ==================== Auth ====================
@@ -159,11 +177,42 @@ const formatTime = (ts) => {
   })
 }
 
-const formatPortionLabel = (val, itemName) => {
-  if (val == null) return ''
+
+const filterKitchenItems = (items) => {
+  if (!items) return []
+  return items.filter(item => {
+    // Napoje: pokazuj tylko jeśli showInKitchen === true
+    if (item.category === 'napoje') return item.showInKitchen === true
+    return true
+  })
+}
+
+const formatPortionPrefix = (val, itemName) => {  if (!val || val === 1) return null
   if (itemName === 'golonka') return `${Math.round(val * 100)}g`
-  const labels = { 1: 'cała porcja', 0.5: '½ porcji', 1.5: '1 ½ porcji', 2: 'podwójna porcja' }
-  return labels[val] || `${val} porcji`
+  const labels = { 0.5: '½×', 1.5: '1½×', 2: '2×', 3: '3×' }
+  return labels[val] || `${val}×`
+}
+
+const currentTime = computed(() => {
+  return new Date(now.value).toLocaleTimeString('pl-PL', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  })
+})
+
+const formatElapsed = (ts) => {  if (!ts?.seconds) return '00:00'
+  const elapsed = Math.floor((now.value - ts.seconds * 1000) / 1000)
+  if (elapsed < 0) return '00:00'
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0')
+  const ss = String(elapsed % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+const elapsedClass = (ts) => {
+  if (!ts?.seconds) return ''
+  const mins = (now.value - ts.seconds * 1000) / 60000
+  if (mins >= 20) return 'timer--danger'
+  if (mins >= 10) return 'timer--warning'
+  return 'timer--ok'
 }
 </script>
 
@@ -200,30 +249,10 @@ const formatPortionLabel = (val, itemName) => {
   padding: 0.65rem 1.25rem;
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
-
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
+.header-brand { display: flex; align-items: center; gap: 0.6rem; }
 .header-icon { font-size: 1.6rem; line-height: 1; }
-
-.kuchnia-title {
-  font-size: 1.5rem;
-  font-weight: 800;
-  margin: 0;
-  letter-spacing: -0.02em;
-  color: #000;
-}
-
-.header-nav {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
+.kuchnia-title { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; color: #000; }
+.header-nav { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
 .btn-nav {
   background: #e5e7eb;
   border: 2px solid #111827;
@@ -241,57 +270,75 @@ const formatPortionLabel = (val, itemName) => {
 
 /* ===================== LAYOUT ===================== */
 .kuchnia-layout {
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
   padding: 1.25rem 1.25rem 2rem;
 }
-
 .main-layout {
   display: flex;
   gap: 1.25rem;
   align-items: flex-start;
 }
 
+.orders-section { flex: 1; min-width: 0; width: 100%; }
+.kitchen-clock {
+  text-align: center;
+  font-size: 3.5rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: #111827;
+  padding: 0.5rem 0 1rem;
+  line-height: 1;
+}
+.clock-seconds { color: #9ca3af; font-weight: 700; }
+
 .orders-section { flex: 3; min-width: 0; }
 
 /* ===================== SIATKA ZAMÓWIEŃ ===================== */
 .orders-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 1.25rem;
 }
 
 /* ===================== KARTA ZAMÓWIENIA ===================== */
 .order-card {
+  width: 345px;
+  flex-shrink: 0;
   border-radius: var(--radius);
   box-shadow: 0 2px 10px rgba(0,0,0,0.09);
   overflow: hidden;
   border: 1px solid var(--border-subtle);
 }
 
-/* nagłówek – kolorowy pasek */
 .order-top {
-  padding: 0.3rem 0.4rem;
+  padding: 0.45rem 0.6rem;
   font-weight: 600;
   color: #111;
 }
-
-.k-type-namiejscu { background: #dbeafe; border-bottom: 2px solid #93c5fd; }
-.k-type-nawynos   { background: #fef9c3; border-bottom: 2px solid #fde047; }
-.k-type-dostawa   { background: #dcfce7; border-bottom: 2px solid #86efac; }
+.k-type-namiejscu  { background: #dbeafe; border-bottom: 2px solid #93c5fd; }
+.k-type-nawynos    { background: #fef9c3; border-bottom: 2px solid #fde047; }
+.k-type-dostawa    { background: #dcfce7; border-bottom: 2px solid #86efac; }
 .order-top-default { background: #f3f4f6; border-bottom: 2px solid #e5e7eb; }
+
+.order-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.2rem;
+}
 
 .order-number {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
-  margin-bottom: 0.15rem;
 }
 
 .order-num-badge {
   font-weight: 900;
-  font-size: 1.1rem;
+  font-size: 1.6rem;
   color: #111827;
 }
 
@@ -299,10 +346,10 @@ const formatPortionLabel = (val, itemName) => {
   display: inline-block;
   background: #e03131;
   color: #fff;
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  padding: 0.1rem 0.45rem;
+  padding: 0.15rem 0.65rem;
   border-radius: 0.35rem;
   text-transform: uppercase;
   animation: blink 1.2s step-start infinite;
@@ -313,48 +360,55 @@ const formatPortionLabel = (val, itemName) => {
   50%       { opacity: 0.25; }
 }
 
+.order-timer {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.65rem;
+  border-radius: 0.4rem;
+}
+.timer--ok      { background: #dcfce7; color: #15803d; }
+.timer--warning { background: #fef9c3; color: #a16207; }
+.timer--danger  { background: #fee2e2; color: #b91c1c; animation: blink 1s step-start infinite; }
+
 .order-meta {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
-  font-size: 0.8rem;
+  font-size: 1.2rem;
   color: #374151;
 }
-
 .order-type-pill {
   background: rgba(0,0,0,0.08);
   border-radius: 9999px;
   padding: 0.05rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: 1.05rem;
   font-weight: 700;
+  margin-left: auto;
 }
 
 /* ciało karty */
 .order-body {
   background: #ffffff;
-  padding: 0.3rem 0.4rem 0.4rem;
+  padding: 0.45rem 0.6rem 0.6rem;
 }
 
 /* ===================== BLOKI OSÓB ===================== */
 .person-block {
-  margin-top: 0.5rem;
-  padding-top: 0.45rem;
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
   border-top: 2px solid #9ca3af;
 }
-.person-block:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-
+.person-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
 .person-block-header {
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #9ca3af;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.45rem;
 }
 
 /* ===================== POZYCJE ===================== */
@@ -364,28 +418,41 @@ const formatPortionLabel = (val, itemName) => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.45rem;
 }
-
 .order-item-line {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 0.1rem;
   line-height: 1.35;
   min-width: 0;
 }
 
+.order-item-main {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: 0;
+}
 .item-num {
-  font-size: 0.82rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #9ca3af;
-  min-width: 1.3rem;
+  min-width: 1rem;
   flex-shrink: 0;
+  line-height: 1;
 }
 
+.item-portion-prefix {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #1e3a8a;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
+}
 .item-name {
-  font-size: 1rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #111827;
   flex: 1;
@@ -394,70 +461,22 @@ const formatPortionLabel = (val, itemName) => {
   overflow-wrap: break-word;
   white-space: normal;
 }
-
 .item-portion {
-  font-size: 0.85rem;
+  font-size: 1.25rem;
   font-weight: 500;
   color: #6b7280;
 }
-
+.item-extras-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 1.35rem;
+}
 .item-extras {
-  font-size: 0.85rem;
+  font-size: 1.35rem;
   font-weight: 500;
   color: #6b7280;
   font-style: italic;
-}
-
-/* ===================== PODSUMOWANIE ===================== */
-.summary-bar {
-  flex: 1;
-  min-width: 180px;
-  background: #ffffff;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
-  padding: 1rem;
-  position: sticky;
-  top: 4.5rem;
-}
-
-.summary-title {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--green-dark);
-  margin: 0 0 0.75rem;
-}
-
-.summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.4rem 0.6rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  border: 1px solid var(--border-subtle);
-}
-
-.summary-name {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #111827;
-}
-
-.summary-count {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: var(--orange-dark);
-  background: var(--orange-soft);
-  border-radius: 0.35rem;
-  padding: 0.05rem 0.5rem;
-  border: 1px solid #ffd6aa;
 }
 
 /* ===================== MISC ===================== */
@@ -471,7 +490,6 @@ const formatPortionLabel = (val, itemName) => {
 /* ===================== RWD ===================== */
 @media (max-width: 900px) {
   .main-layout { flex-direction: column; }
-  .summary-bar { width: 100%; position: static; }
   .kuchnia-header { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
 }
 </style>
