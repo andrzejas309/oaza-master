@@ -172,7 +172,6 @@ button {
 /* Karty zamówień – duże, TV-friendly */
 
 .order-card {
-    padding: 1rem 1.25rem;
     border-radius: 1rem;
 }
 
@@ -182,9 +181,6 @@ button {
 }
 
 @media (min-width: 1600px) {
-    .order-card {
-        padding: 1.4rem 1.75rem;
-    }
 
     .order-card-header {
         font-size: 1.3rem;

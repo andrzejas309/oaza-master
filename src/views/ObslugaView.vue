@@ -67,27 +67,61 @@
 
         <!-- PRAWA: AKTUALNE ZAMÓWIENIE -->
         <div class="current-order">
-          <h3 class="section-title">🧾 Aktualne zamówienie</h3>
-          <ul v-if="orderItems.length" class="order-items-list">
-            <li v-for="item in orderItems" :key="item.name" class="order-item-row">
-              <div class="order-item-info">
-                <div>
-                  <span class="order-item-name">{{ item.name }}</span>
-                  <span class="portion-label"> ({{ formatPortionLabel(item.quantity, item.name) }})</span>
-                  <span v-if="item.count > 1" class="count-badge">×{{ item.count }}</span>
+          <div class="current-order-header">
+            <h3 class="section-title" style="margin:0;">🧾 Aktualne zamówienie</h3>
+            <button class="btn-sage btn-add-person" @click="addPerson">+ Osoba</button>
+          </div>
+
+          <!-- LISTA OSÓB jedna pod drugą -->
+          <div class="persons-list">
+            <div
+              v-for="idx in persons.length"
+              :key="idx"
+              class="person-card"
+              :class="{ 'person-card--active': activeSeat === idx - 1 }"
+              :style="personCardStyle(idx - 1)"
+            >
+              <div class="person-card-header" @click="activeSeat = idx - 1">
+                <span class="person-card-title">Osoba {{ idx }}</span>
+                <div class="person-card-header-right">
+                  <span v-if="activeSeat === idx - 1" class="person-card-active-badge">aktywne</span>
+                  <button
+                    class="person-card-duplicate"
+                    @click.stop="duplicatePerson(idx - 1)"
+                    title="Duplikuj osobę"
+                  >⧉</button>
+                  <button
+                    v-if="persons.length > 1"
+                    class="person-card-remove"
+                    @click.stop="removePerson(idx - 1)"
+                    title="Usuń osobę"
+                  >✕</button>
                 </div>
-                <div v-if="item.extras && item.extras.length" class="order-item-extras muted">+ {{ item.extras.join(', ') }}</div>
               </div>
-              <div class="order-item-right">
-                <span class="order-item-price">{{ item.finalPrice.toFixed(2) }} zł</span>
-                <div class="order-item-actions">
-                  <button class="icon-btn add" @click="increaseOrderItemCount(item.name, item.quantity, item.extras)" title="Dodaj jeszcze">+</button>
-                  <button v-if="canEditItem(item)" class="icon-btn edit" @click="startEditItem(item)" title="Edytuj składniki">✏️</button>
-                  <button class="icon-btn subtract" @click="item.count <= 1 ? removeItemByKey(item.key) : decreaseOrderItemCount(item.name, item.quantity, item.extras)" :title="item.count <= 1 ? 'Usuń' : 'Odejmij'">−</button>
-                </div>
-              </div>
-            </li>
-          </ul>
+
+              <ul v-if="getPersonItems(idx - 1).length" class="order-items-list">
+                <li v-for="item in getPersonItems(idx - 1)" :key="item.key" class="order-item-row">
+                  <div class="order-item-info">
+                    <div>
+                      <span class="order-item-name">{{ item.name }}</span>
+                      <span class="portion-label"> ({{ formatPortionLabel(item.quantity, item.name) }})</span>
+                      <span v-if="item.count > 1" class="count-badge">×{{ item.count }}</span>
+                    </div>
+                    <div v-if="item.extras && item.extras.length" class="order-item-extras muted">+ {{ item.extras.join(', ') }}</div>
+                  </div>
+                  <div class="order-item-right">
+                    <span class="order-item-price">{{ item.finalPrice.toFixed(2) }} zł</span>
+                    <div class="order-item-actions">
+                      <button class="icon-btn add" @click="addItemToSeat(idx - 1, item)" title="Dodaj jeszcze">+</button>
+                      <button v-if="canEditItem(item)" class="icon-btn edit" @click="startEditItemForSeat(idx - 1, item)" title="Edytuj składniki">✏️</button>
+                      <button class="icon-btn subtract" @click="item.count <= 1 ? removeItemFromSeat(idx - 1, item.key) : decreaseItemInSeat(idx - 1, item.name, item.quantity, item.extras)" :title="item.count <= 1 ? 'Usuń' : 'Odejmij'">−</button>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <p v-else class="muted person-empty">Kliknij pozycję z menu →</p>
+            </div>
+          </div>
 
           <!-- POJEMNIKI -->
           <div class="containers-row">
@@ -99,15 +133,13 @@
             </div>
           </div>
 
-          <p v-if="!orderItems.length && containerCount === 0" class="muted empty-hint">Brak pozycji.</p>
-
-          <div class="order-summary" v-if="orderItems.length || containerCount > 0">
-            <span>Razem:</span>
+          <div class="order-summary" v-if="totalItemCount > 0 || containerCount > 0">
+            <span>Razem ({{ persons.length }} os.):</span>
             <strong>{{ totalPrice.toFixed(2) }} zł</strong>
           </div>
 
           <div class="order-actions">
-            <button class="btn-sage btn-large" @click="saveOrder" :disabled="!orderItems.length || saving || !selectedOrderType">
+            <button class="btn-sage btn-large" @click="saveOrder" :disabled="totalItemCount === 0 || saving || !selectedOrderType">
               ✅ {{ saving ? 'Zapisywanie…' : (editingOrderId ? 'Zaktualizuj zamówienie' : 'Zapisz zamówienie') }}
             </button>
           </div>
@@ -120,19 +152,30 @@
           <h2 class="section-title">Zamówienia na miejscu</h2>
           <span v-if="onSiteQueueCount > 0" class="queue-badge">+{{ onSiteQueueCount }} w kolejce</span>
         </div>
-        <transition-group name="fade" tag="div" class="orders-list">
+          <transition-group name="fade" tag="div" class="orders-list">
           <div v-for="order in ordersOnSite" :key="order.id" class="order-card">
             <div class="order-info">
               <div class="order-number">
                 <span class="order-num-badge">#{{ order.number }}</span>
                 <span class="order-time">{{ formatTime(order.createdAt) }}</span>
               </div>
-              <div class="order-items">
+              <!-- Nowy format: osoby -->
+              <template v-if="order.persons && order.persons.length">
+                <div v-for="person in order.persons" :key="person.seat" class="order-person-group">
+                  <span class="order-person-label">Osoba {{ person.seat }}</span>
+                  <div v-for="item in person.items" :key="item.name" class="order-item">
+                    <span>{{ item.name }} <span class="portion-label">({{ formatPortionLabel(item.quantity ?? 1, item.name) }})</span></span>
+                    <div v-if="item.extras && item.extras.length" class="muted" style="font-size:0.8rem">+ {{ item.extras.join(', ') }}</div>
+                  </div>
+                </div>
+              </template>
+              <!-- Stary format: płaska lista (backward compatibility) -->
+              <template v-else>
                 <div v-for="item in order.items" :key="item.name" class="order-item">
                   <span>{{ item.name }} <span class="portion-label">({{ formatPortionLabel(item.quantity ?? 1, item.name) }})</span></span>
                   <div v-if="item.extras && item.extras.length" class="muted" style="font-size:0.8rem">+ {{ item.extras.join(', ') }}</div>
                 </div>
-              </div>
+              </template>
             </div>
             <div class="order-card-actions">
               <button class="btn-action btn-action--edit" @click="startEditOrder(order)">Edytuj</button>
@@ -156,12 +199,23 @@
                 <span class="order-num-badge">#{{ order.number }}</span>
                 <span class="order-time">{{ formatTime(order.createdAt) }}</span>
               </div>
-              <div class="order-items">
+              <!-- Nowy format: osoby -->
+              <template v-if="order.persons && order.persons.length">
+                <div v-for="person in order.persons" :key="person.seat" class="order-person-group">
+                  <span class="order-person-label">Osoba {{ person.seat }}</span>
+                  <div v-for="item in person.items" :key="item.name" class="order-item">
+                    <span>{{ item.name }} <span class="portion-label">({{ formatPortionLabel(item.quantity ?? 1, item.name) }})</span></span>
+                    <div v-if="item.extras && item.extras.length" class="muted" style="font-size:0.8rem">+ {{ item.extras.join(', ') }}</div>
+                  </div>
+                </div>
+              </template>
+              <!-- Stary format: płaska lista (backward compatibility) -->
+              <template v-else>
                 <div v-for="item in order.items" :key="item.name" class="order-item">
                   <span>{{ item.name }} <span class="portion-label">({{ formatPortionLabel(item.quantity ?? 1, item.name) }})</span></span>
                   <div v-if="item.extras && item.extras.length" class="muted" style="font-size:0.8rem">+ {{ item.extras.join(', ') }}</div>
                 </div>
-              </div>
+              </template>
             </div>
             <div class="order-card-actions">
               <button class="btn-action btn-action--edit" @click="startEditOrder(order)">Edytuj</button>
@@ -237,17 +291,11 @@ import { getRoleForEmail, clearRoleCache } from '@/router'
 
 const router = useRouter()
 
-// ==================== Menu from Firestore ====================
 const { menuItems, fetchMenu } = useMenu()
 const menu = computed(() => menuItems.value)
-
-// ==================== Extras from Firestore ====================
 const { extrasPriceMap, extrasForCategory, fetchExtras } = useExtras()
-
-// ==================== Backfill Date ====================
 const { isActive: backfillActive, label: backfillLabel, getEffectiveDate } = useBackfillDate()
 
-// ==================== Constants ====================
 const MAX_ORDERS_DISPLAY = 8
 
 const PORTIONS_FULL = [
@@ -256,25 +304,13 @@ const PORTIONS_FULL = [
   { label: 'Półtora', value: 1.5 },
   { label: 'Podwójna', value: 2 },
 ]
-
 const PORTIONS_HALF = [
   { label: 'Cała porcja', value: 1 },
   { label: 'Pół', value: 0.5 },
 ]
-
-
-const portionExcluded = [
-  'barszcz czerwony',
-  'chłodnik',
-  'flaczki',
-  'żurek z kiełbaską',
-]
-
-// Dania, które mimo braku kategorii zupowej/dodatków mają popup porcji
+const portionExcluded = ['barszcz czerwony', 'chłodnik', 'flaczki', 'żurek z kiełbaską']
 const portionIncludedNames = ['naleśniki', 'pierogi']
-
 const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'dodatki', 'surówki', 'napoje', 'składniki']
-
 
 // ==================== State ====================
 const showForm = ref(false)
@@ -283,9 +319,12 @@ const activeOrders = ref([])
 const selectedOrderType = ref(null)
 const selectedCategory = ref('zupy')
 const containerCount = ref(0)
-const orderDraft = reactive({ items: {} })
 const editingOrderId = ref(null)
 const userRole = ref(null)
+
+// Wieloosobowy draft
+const persons = ref([reactive({ items: {} })])
+const activeSeat = ref(0)
 
 // Dialog state
 const portionDialogOpen = ref(false)
@@ -293,11 +332,9 @@ const portionDialogItem = ref(null)
 const PORTIONS = ref(PORTIONS_FULL)
 const extrasDialogOpen = ref(false)
 const extrasDialogItem = ref(null)
-const extrasDialogItemKey = ref(null) // Klucz edytowanej pozycji
+const extrasDialogItemKey = ref(null)
 const extrasSelected = ref([])
 const extrasOptions = ref([])
-
-// Dialog gramatury dla wątróbki
 const gramDialogOpen = ref(false)
 const gramDialogItem = ref(null)
 const gramValue = ref('')
@@ -322,120 +359,128 @@ onMounted(() => {
 
 onUnmounted(() => unsub && unsub())
 
+// Pastelowa paleta dla kart osób (bez zielonego)
+const SEAT_COLORS = [
+  { bg: '#ffffff', border: '#e5e7eb', title: '#111827' }, // biały
+  { bg: '#f3f4f6', border: '#d1d5db', title: '#111827' }, // jasno szary
+]
+
+const personCardStyle = (idx) => {
+  const c = SEAT_COLORS[idx % SEAT_COLORS.length]
+  return { background: c.bg, borderColor: c.border }
+}
+
+// ==================== Person management ====================
+const addPerson = () => {
+  persons.value.push(reactive({ items: {} }))
+  // activeSeat wskazuje na nową osobę — pozycje z menu trafią do niej
+  activeSeat.value = persons.value.length - 1
+}
+
+const removePerson = (idx) => {
+  if (persons.value.length <= 1) return
+  persons.value.splice(idx, 1)
+  if (activeSeat.value >= persons.value.length) activeSeat.value = persons.value.length - 1
+}
+
+const duplicatePerson = (idx) => {
+  const source = persons.value[idx]
+  if (!source) return
+  const copy = reactive({ items: {} })
+  for (const [key, data] of Object.entries(source.items)) {
+    copy.items[key] = { ...data, extras: [...(data.extras || [])] }
+  }
+  // Wstaw duplikat zaraz po oryginale
+  persons.value.splice(idx + 1, 0, copy)
+  activeSeat.value = idx + 1
+}
+
+const currentDraft = computed(() => persons.value[activeSeat.value] || persons.value[0])
+
+// Pomocnicze metody bezpośrednio na konkretnej osobie (idx)
+const addItemToSeat = (idx, item) => {
+  activeSeat.value = idx
+  increaseOrderItemCount(item.name, item.quantity, item.extras)
+}
+
+const removeItemFromSeat = (idx, key) => {
+  delete persons.value[idx].items[key]
+}
+
+const decreaseItemInSeat = (idx, itemName, itemQuantity, itemExtras = []) => {
+  const key = generateItemKey(itemName, itemQuantity, itemExtras)
+  const entry = persons.value[idx]?.items[key]
+  if (entry && entry.count > 1) entry.count -= 1
+}
+
+const startEditItemForSeat = (idx, orderItem) => {
+  activeSeat.value = idx
+  startEditItem(orderItem)
+}
+
 // ==================== Computed - Containers ====================
 const containerPrice = computed(() => {
   const container = menu.value.find((m) => m.name === 'pojemniki')
   return container ? container.price : 0
 })
-
 const containersPrice = computed(() => containerCount.value * containerPrice.value)
 
 // ==================== Computed - Menu ====================
 const filteredMenu = computed(() => {
-  const grouped = {}
-
-  for (const item of menu.value) {
-    if (!grouped[item.category]) grouped[item.category] = []
-    grouped[item.category].push(item)
-  }
-
-  const selectedItems = (grouped[selectedCategory.value] || [])
+  const selectedItems = menu.value
+    .filter(i => i.category === selectedCategory.value)
     .slice()
     .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
-
-  return {
-    [selectedCategory.value]: selectedItems,
-  }
-})
-
-// ==================== Computed - Order Items ====================
-const orderItems = computed(() =>
-  Object.entries(orderDraft.items)
-    .filter(([, data]) => data.quantity > 0)
-    .map(([key, data]) => {
-      // data.name zawiera prawdziwą nazwę pozycji
-      const itemName = data.name
-      const found = menu.value.find((m) => m.name === itemName)
-      const basePrice = found?.price || 0
-
-      const extrasPrice = (data.extras || []).reduce(
-        (sum, extraName) => sum + (extrasPriceMap.value[extraName] || 0),
-        0,
-      )
-
-      const unitPrice = basePrice + extrasPrice
-      const itemCount = data.count || 1
-      const finalPrice = unitPrice * data.quantity * itemCount
-
-      return {
-        key: key,  // Unikalny klucz do identyfikacji
-        name: itemName,  // Prawdziwa nazwa
-        quantity: data.quantity,
-        count: itemCount,
-        extras: data.extras || [],
-        basePrice,
-        extrasPrice,
-        unitPrice,
-        finalPrice,
-      }
-    }),
-)
-
-const totalPrice = computed(() =>
-  orderItems.value.reduce((sum, item) => sum + item.finalPrice, 0) + containersPrice.value
-)
-
-// ==================== Computed - Orders Filtering ====================
-const ordersOnSite = computed(() =>
-  activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, MAX_ORDERS_DISPLAY)
-)
-
-const ordersToGo = computed(() =>
-  activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, MAX_ORDERS_DISPLAY)
-)
-
-const onSiteQueueCount = computed(() => {
-  const total = activeOrders.value.filter((o) => o.type === 'na_miejscu').length
-  return Math.max(0, total - MAX_ORDERS_DISPLAY)
-})
-
-const toGoQueueCount = computed(() => {
-  const total = activeOrders.value.filter((o) => o.type === 'na_wynos').length
-  return Math.max(0, total - MAX_ORDERS_DISPLAY)
+  return { [selectedCategory.value]: selectedItems }
 })
 
 // ==================== Helper Functions ====================
-// Generuje unikalny klucz dla pozycji (name + quantity + extras)
 const generateItemKey = (name, quantity = 1, extras = []) => {
   let key = name
-
-  // Dodaj quantity do klucza (różne porcje = różne pozycje)
-  if (quantity !== 1) {
-    key += `|q${quantity}`
-  }
-
-  // Dodaj extras do klucza
-  if (extras && extras.length > 0) {
-    const sortedExtras = [...extras].sort().join(',')
-    key += `|${sortedExtras}`
-  }
-
+  if (quantity !== 1) key += `|q${quantity}`
+  if (extras && extras.length > 0) key += `|${[...extras].sort().join(',')}`
   return key
 }
 
 const ensureEntry = (name, quantity = 1, extras = []) => {
   const key = generateItemKey(name, quantity, extras)
-  if (!orderDraft.items[key]) {
-    orderDraft.items[key] = {
-      name: name,
-      quantity: quantity,
-      count: 1,
-      extras: [...extras],
-    }
+  const draft = currentDraft.value
+  if (!draft.items[key]) {
+    draft.items[key] = { name, quantity, count: 1, extras: [...extras] }
   }
-  return orderDraft.items[key]
+  return draft.items[key]
 }
 
+const getPersonItems = (idx) => {
+  const draft = persons.value[idx]
+  if (!draft) return []
+  return Object.entries(draft.items)
+    .filter(([, data]) => data.quantity > 0)
+    .map(([key, data]) => {
+      const found = menu.value.find((m) => m.name === data.name)
+      const basePrice = found?.price || 0
+      const extrasPrice = (data.extras || []).reduce((sum, n) => sum + (extrasPriceMap.value[n] || 0), 0)
+      const unitPrice = basePrice + extrasPrice
+      const itemCount = data.count || 1
+      const finalPrice = unitPrice * data.quantity * itemCount
+      return { key, name: data.name, quantity: data.quantity, count: itemCount, extras: data.extras || [], basePrice, extrasPrice, unitPrice, finalPrice }
+    })
+}
+
+const totalItemCount = computed(() => persons.value.reduce((sum, _, idx) => sum + getPersonItems(idx).length, 0))
+const totalPrice = computed(() => {
+  let sum = 0
+  for (let i = 0; i < persons.value.length; i++) sum += getPersonItems(i).reduce((s, item) => s + item.finalPrice, 0)
+  return sum + containersPrice.value
+})
+
+// ==================== Computed - Orders Filtering ====================
+const ordersOnSite = computed(() => activeOrders.value.filter((o) => o.type === 'na_miejscu').slice(0, MAX_ORDERS_DISPLAY))
+const ordersToGo = computed(() => activeOrders.value.filter((o) => o.type === 'na_wynos').slice(0, MAX_ORDERS_DISPLAY))
+const onSiteQueueCount = computed(() => Math.max(0, activeOrders.value.filter((o) => o.type === 'na_miejscu').length - MAX_ORDERS_DISPLAY))
+const toGoQueueCount = computed(() => Math.max(0, activeOrders.value.filter((o) => o.type === 'na_wynos').length - MAX_ORDERS_DISPLAY))
+
+// ==================== Item helpers ====================
 const canEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return false
@@ -444,294 +489,181 @@ const canEditItem = (orderItem) => {
 
 const formatPortionLabel = (val, itemName) => {
   if (val == null) return '1 porcja'
-
-  // Specjalne formatowanie dla golonki (gramatura)
-  if (itemName === 'golonka') {
-    const grams = Math.round(val * 100)
-    return `${grams}g`
-  }
-
-  const labels = {
-    1: 'cała porcja',
-    0.5: '½ porcji',
-    1.5: '1 ½ porcji',
-    2: 'podwójna porcja'
-  }
+  if (itemName === 'golonka') return `${Math.round(val * 100)}g`
+  const labels = { 1: 'cała porcja', 0.5: '½ porcji', 1.5: '1 ½ porcji', 2: 'podwójna porcja' }
   return labels[val] || `${val} porcji`
 }
 
 const formatTime = (ts) => {
   if (!ts?.seconds) return ''
-  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return new Date(ts.seconds * 1000).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 }
 
 // ==================== Order Item Management ====================
-const removeItem = (item) => {
-  const key = generateItemKey(item.name, item.quantity, item.extras)
-  delete orderDraft.items[key]
-}
-
-const removeItemByKey = (key) => {
-  delete orderDraft.items[key]
-}
-
 const increase = (item) => {
-  // Specjalna obsługa dla golonki - popup gramatury
   if (item.name === 'golonka') {
-    gramDialogItem.value = item
-    gramValue.value = ''
-    gramDialogOpen.value = true
-    return
+    gramDialogItem.value = item; gramValue.value = ''; gramDialogOpen.value = true; return
   }
-
   const portionCategories = ['zupy', 'zupa dnia', 'dodatki', 'surówki']
-
-  // Pozycje bez wyboru porcji - standardowa porcja (quantity=1)
   if (portionExcluded.includes(item.name)) {
     const key = generateItemKey(item.name, 1, [])
-    if (orderDraft.items[key]) {
-      orderDraft.items[key].count += 1
-    } else {
-      ensureEntry(item.name, 1, [])
-    }
+    if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
+    else ensureEntry(item.name, 1, [])
     return
   }
-
-  // Pozycje z wyborem porcji - pokazuj dialog
   const nameLC = item.name.toLowerCase()
   const isPortionName = portionIncludedNames.some(n => nameLC.includes(n))
-
   if (portionCategories.includes(item.category) || isPortionName) {
-    PORTIONS.value = ['dodatki', 'surówki'].includes(item.category)
-      ? PORTIONS_HALF
-      : PORTIONS_FULL
-
-    portionDialogItem.value = item
-    portionDialogOpen.value = true
-    return
+    PORTIONS.value = ['dodatki', 'surówki'].includes(item.category) ? PORTIONS_HALF : PORTIONS_FULL
+    portionDialogItem.value = item; portionDialogOpen.value = true; return
   }
-
-  // Pozostałe pozycje (dania główne) - standardowa porcja (quantity=1)
   const key = generateItemKey(item.name, 1, [])
-  if (orderDraft.items[key]) {
-    orderDraft.items[key].count += 1
-  } else {
-    ensureEntry(item.name, 1, [])
-  }
+  if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
+  else ensureEntry(item.name, 1, [])
 }
 
 const increaseOrderItemCount = (itemName, itemQuantity, itemExtras = []) => {
   const key = generateItemKey(itemName, itemQuantity, itemExtras)
-  const entry = orderDraft.items[key]
-  if (entry) {
-    entry.count = (entry.count || 1) + 1
-  }
+  const entry = currentDraft.value.items[key]
+  if (entry) entry.count = (entry.count || 1) + 1
 }
 
-const decreaseOrderItemCount = (itemName, itemQuantity, itemExtras = []) => {
-  const key = generateItemKey(itemName, itemQuantity, itemExtras)
-  const entry = orderDraft.items[key]
-  if (entry && entry.count > 1) {
-    entry.count -= 1
-  }
-}
 
 // ==================== Portion Dialog ====================
 const choosePortion = (value) => {
   const item = portionDialogItem.value
   if (!item) return
-
-  // Każdy rozmiar porcji to osobna pozycja
   const key = generateItemKey(item.name, value, [])
-
-  if (orderDraft.items[key]) {
-    // Ta sama porcja już istnieje - zwiększ count
-    orderDraft.items[key].count += 1
-  } else {
-    // Nowy rozmiar porcji - utwórz nową pozycję
-    ensureEntry(item.name, value, [])
-  }
-
-  portionDialogOpen.value = false
-  portionDialogItem.value = null
+  if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
+  else ensureEntry(item.name, value, [])
+  portionDialogOpen.value = false; portionDialogItem.value = null
 }
 
-// ==================== Gram Dialog (dla wątróbki) ====================
+// ==================== Gram Dialog ====================
 const confirmGramAmount = () => {
   const item = gramDialogItem.value
   if (!item) return
-
   const grams = parseInt(gramValue.value)
-  if (!grams || grams <= 0) {
-    alert('Proszę podać prawidłową gramaaturę')
-    return
-  }
-
-  // Cena za 100g, więc quantity = grams / 100
+  if (!grams || grams <= 0) { alert('Proszę podać prawidłową gramaturę'); return }
   const quantity = grams / 100
   const key = generateItemKey(item.name, quantity, [])
-
-  if (orderDraft.items[key]) {
-    // Ta sama gramatura już istnieje - zwiększ count
-    orderDraft.items[key].count += 1
-  } else {
-    // Nowa gramatura - utwórz nową pozycję
-    ensureEntry(item.name, quantity, [])
-  }
-
-  gramDialogOpen.value = false
-  gramDialogItem.value = null
-  gramValue.value = ''
+  if (currentDraft.value.items[key]) currentDraft.value.items[key].count += 1
+  else ensureEntry(item.name, quantity, [])
+  gramDialogOpen.value = false; gramDialogItem.value = null; gramValue.value = ''
 }
 
 // ==================== Extras Dialog ====================
 const startEditItem = (orderItem) => {
   const base = menu.value.find((m) => m.name === orderItem.name)
   if (!base) return
-
   const extras = extrasForCategory(base.category)
   if (!extras || !extras.length) return
-
   extrasOptions.value = extras
   extrasDialogItem.value = base
-
-  // Zapisz oryginalny klucz (z quantity) i extras
   extrasDialogItemKey.value = generateItemKey(orderItem.name, orderItem.quantity, orderItem.extras)
   extrasSelected.value = orderItem.extras ? [...orderItem.extras] : []
-
   extrasDialogOpen.value = true
 }
 
 const toggleExtra = (name) => {
   const idx = extrasSelected.value.indexOf(name)
-  if (idx === -1) {
-    extrasSelected.value.push(name)
-  } else {
-    extrasSelected.value.splice(idx, 1)
-  }
-
+  if (idx === -1) extrasSelected.value.push(name)
+  else extrasSelected.value.splice(idx, 1)
   saveExtras()
 }
 
 const saveExtras = () => {
   const item = extrasDialogItem.value
   if (!item) return
-
   const oldKey = extrasDialogItemKey.value
-  const oldEntry = orderDraft.items[oldKey]
+  const oldEntry = currentDraft.value.items[oldKey]
   if (!oldEntry) return
-
   const newExtras = [...extrasSelected.value]
   const newKey = generateItemKey(item.name, oldEntry.quantity, newExtras)
-
-  // Jeśli klucz się zmienił (inne extras), przenieś dane do nowej pozycji
   if (oldKey !== newKey) {
-    // Utwórz nową pozycję z nowymi extras
-    orderDraft.items[newKey] = {
-      name: item.name,
-      quantity: oldEntry.quantity,
-      count: oldEntry.count,
-      extras: newExtras,
-    }
-
-    // Usuń starą pozycję
-    delete orderDraft.items[oldKey]
+    currentDraft.value.items[newKey] = { name: item.name, quantity: oldEntry.quantity, count: oldEntry.count, extras: newExtras }
+    delete currentDraft.value.items[oldKey]
   } else {
-    // Ten sam klucz - tylko aktualizuj extras (na wszelki wypadek)
     oldEntry.extras = newExtras
   }
-
-  extrasDialogOpen.value = false
-  extrasDialogItem.value = null
-  extrasDialogItemKey.value = null
+  extrasDialogOpen.value = false; extrasDialogItem.value = null; extrasDialogItemKey.value = null
 }
 
 // ==================== Container Management ====================
-const increaseContainers = () => {
-  containerCount.value++
-}
-
-const decreaseContainers = () => {
-  if (containerCount.value > 0) {
-    containerCount.value--
-  }
-}
+const increaseContainers = () => { containerCount.value++ }
+const decreaseContainers = () => { if (containerCount.value > 0) containerCount.value-- }
 
 // ==================== Form Management ====================
+const resetForm = () => {
+  persons.value = [reactive({ items: {} })]
+  activeSeat.value = 0
+  selectedOrderType.value = null
+  containerCount.value = 0
+  editingOrderId.value = null
+}
+
 const toggleOrderForm = () => {
   showForm.value = !showForm.value
-  if (!showForm.value) {
-    orderDraft.items = {}
-    selectedOrderType.value = null
-    containerCount.value = 0
-    editingOrderId.value = null
-  }
+  if (!showForm.value) resetForm()
 }
 
 const startEditOrder = (order) => {
-  // Wyczyść bieżący draft
-  orderDraft.items = {}
-
-  // Załaduj typ zamówienia
-  selectedOrderType.value = order.type
-
-  // Załaduj pojemniki
-  containerCount.value = order.containers || 0
-
-  // Załaduj pozycje — odbuduj orderDraft.items z zapisanych danych
-  for (const item of order.items) {
-    const name = item.name
-    const quantity = item.quantity ?? 1
-    const extras = item.extras || []
-    const count = item.count || 1
-    const key = generateItemKey(name, quantity, extras)
-    orderDraft.items[key] = { name, quantity, count, extras: [...extras] }
+  persons.value = []
+  if (order.persons && order.persons.length) {
+    for (const person of order.persons) {
+      const draft = reactive({ items: {} })
+      for (const item of (person.items || [])) {
+        const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
+        draft.items[key] = { name: item.name, quantity: item.quantity ?? 1, count: item.count ?? 1, extras: [...(item.extras ?? [])] }
+      }
+      persons.value.push(draft)
+    }
+  } else {
+    const draft = reactive({ items: {} })
+    for (const item of (order.items || [])) {
+      const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
+      draft.items[key] = { name: item.name, quantity: item.quantity ?? 1, count: item.count ?? 1, extras: [...(item.extras ?? [])] }
+    }
+    persons.value.push(draft)
   }
-
-  // Ustaw tryb edycji
+  if (persons.value.length === 0) persons.value.push(reactive({ items: {} }))
+  activeSeat.value = 0
+  selectedOrderType.value = order.type
+  containerCount.value = order.containers || 0
   editingOrderId.value = order.id
-
-  // Pokaż formularz i przewiń do góry
   showForm.value = true
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 // ==================== Order Operations ====================
-const saveOrder = async () => {
-  if (!orderItems.value.length) return
-  saving.value = true
+const buildPersonsPayload = () => {
+  return persons.value.map((_, idx) => ({
+    seat: idx + 1,
+    items: getPersonItems(idx).map(item => ({
+      name: item.name, quantity: item.quantity, count: item.count, extras: item.extras, finalPrice: item.finalPrice,
+    }))
+  })).filter(p => p.items.length > 0)
+}
 
+const saveOrder = async () => {
+  if (totalItemCount.value === 0) return
+  saving.value = true
+  const personsPayload = buildPersonsPayload()
+  const flatItems = personsPayload.flatMap(p => p.items)
   if (editingOrderId.value) {
-    // Tryb edycji — zaktualizuj istniejące zamówienie
     await updateDoc(doc(db, 'orders', editingOrderId.value), {
-      items: orderItems.value,
-      containers: containerCount.value,
-      type: selectedOrderType.value,
-      edited: true,
+      persons: personsPayload, items: flatItems, containers: containerCount.value, type: selectedOrderType.value, edited: true,
     })
   } else {
-    // Nowe zamówienie — użyj daty backfill jeśli aktywna
     const effectiveDate = getEffectiveDate()
     await addDoc(collection(db, 'orders'), {
-      number: Date.now(),
-      items: orderItems.value,
-      containers: containerCount.value,
-      type: selectedOrderType.value,
-      status: 'w_toku',
+      number: Date.now(), persons: personsPayload, items: flatItems, containers: containerCount.value,
+      type: selectedOrderType.value, status: 'w_toku',
       createdAt: effectiveDate ? Timestamp.fromDate(effectiveDate) : serverTimestamp(),
       ...(effectiveDate ? { backfilled: true } : {}),
     })
   }
-
-  orderDraft.items = {}
-  selectedOrderType.value = null
-  containerCount.value = 0
-  editingOrderId.value = null
-  showForm.value = false
-  saving.value = false
+  resetForm(); showForm.value = false; saving.value = false
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -1222,8 +1154,7 @@ button[disabled] {
 
 .order-info { flex: 1; min-width: 0; }
 .order-time { font-size: 0.95rem; font-weight: 700; color: var(--muted); }
-.order-items { font-size: 0.9rem; color: var(--muted); margin-top: 0.1rem; }
-.order-item { margin-top: 0.15rem; }
+.order-item { margin-top: 0.15rem; font-size: 0.9rem; color: var(--muted); }
 
 .order-card-actions {
   display: flex;
@@ -1329,6 +1260,144 @@ button[disabled] {
   font-size: 0.85em;
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* ===================== KARTY OSÓB (lista pionowa) ===================== */
+
+/* Naprzemienne białe / jasnoszare karty osób */
+
+.current-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.btn-add-person {
+  padding: 0.55rem 1.25rem;
+  font-size: 1rem;
+}
+.btn-add-person:hover { filter: brightness(1.05); }
+
+.persons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.person-card {
+  border-radius: 0.75rem;
+  border-width: 2px;
+  border-style: solid;
+  padding: 0.6rem 0.75rem 0.5rem;
+  transition: box-shadow 0.15s;
+}
+
+.person-card--active {
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.18);
+}
+
+.person-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.person-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.person-card-active-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #166534;
+  background: #bbf7d0;
+  border-radius: 9999px;
+  padding: 0.18rem 0.6rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.person-card-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #111827;
+}
+
+.person-card-duplicate {
+  background: #eff6ff;
+  border: 1.5px solid #93c5fd;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  border-radius: 9999px;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.person-card-duplicate:hover { background: #dbeafe; border-color: #60a5fa; }
+
+.person-card-remove {
+  background: #fee2e2;
+  border: 1.5px solid #fca5a5;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #dc2626;
+  border-radius: 9999px;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.person-card-remove:hover { background: #fecaca; border-color: #f87171; }
+
+.person-empty {
+  font-size: 0.83rem;
+  font-style: italic;
+  padding: 0.25rem 0;
+  margin: 0;
+}
+
+/* ===================== GRUPY OSÓB W KARTACH ZAMÓWIEŃ ===================== */
+.order-person-group {
+  margin-top: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 3px solid #93c5fd;
+  background: #f0f7ff;
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+
+.order-person-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e40af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.12rem;
 }
 
 /* ===================== RWD ===================== */

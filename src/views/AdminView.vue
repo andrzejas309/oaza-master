@@ -190,14 +190,29 @@
                     </div>
                   </div>
                   <div class="history-order-items">
-                    <div v-for="item in order.items" :key="item.name">
-                      • {{ item.name }}
-                      <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">
-                        {{ item.count }}×
-                      </span>
-                      <span v-if="item.quantity && item.quantity !== 1">({{ formatQuantity(item.quantity) }})</span>
-                      <span v-if="item.extras && item.extras.length"> + {{ item.extras.join(', ') }}</span>
-                    </div>
+                    <!-- Nowy format: osoby -->
+                    <template v-if="order.persons && order.persons.length">
+                      <div v-for="person in order.persons" :key="person.seat" class="history-person-block">
+                        <span class="history-person-label">Osoba {{ person.seat }}</span>
+                        <div v-for="item in person.items" :key="item.name + person.seat" class="history-person-item">
+                          • {{ item.name }}
+                          <span v-if="item.count && item.count > 1" style="font-weight:600;color:#374151;">{{ item.count }}×</span>
+                          <span v-if="item.quantity && item.quantity !== 1">({{ formatQuantity(item.quantity) }})</span>
+                          <span v-if="item.extras && item.extras.length"> + {{ item.extras.join(', ') }}</span>
+                        </div>
+                      </div>
+                    </template>
+                    <!-- Stary format: płaska lista -->
+                    <template v-else>
+                      <div v-for="item in order.items" :key="item.name">
+                        • {{ item.name }}
+                        <span v-if="item.count && item.count > 1" style="font-weight: 600; color: #374151;">
+                          {{ item.count }}×
+                        </span>
+                        <span v-if="item.quantity && item.quantity !== 1">({{ formatQuantity(item.quantity) }})</span>
+                        <span v-if="item.extras && item.extras.length"> + {{ item.extras.join(', ') }}</span>
+                      </div>
+                    </template>
                     <div v-if="order.containers > 0" style="margin-top: 0.25rem; font-style: italic;">
                       Pojemniki: {{ order.containers }}
                     </div>
@@ -264,6 +279,22 @@
             >Na wynos</button>
           </div>
 
+          <!-- Zakładki osób -->
+          <div class="edit-persons-tabs">
+            <button
+              v-for="idx in editPersons.length"
+              :key="idx - 1"
+              class="edit-person-tab"
+              :class="{ active: editActiveSeat === idx - 1 }"
+              @click="editActiveSeat = idx - 1"
+            >
+              Osoba {{ idx }}
+              <span v-if="editPersonItemCount(idx - 1) > 0" class="edit-person-tab-count">{{ editPersonItemCount(idx - 1) }}</span>
+            </button>
+            <button class="edit-person-tab edit-person-tab--add" @click="editAddPerson">+ Osoba</button>
+            <button v-if="editPersons.length > 1" class="edit-person-tab edit-person-tab--remove" @click="editRemovePerson(editActiveSeat)">🗑</button>
+          </div>
+
           <div class="edit-order-columns">
 
             <!-- LEWA: Mini menu -->
@@ -291,12 +322,12 @@
               </div>
             </div>
 
-            <!-- PRAWA: Lista zamówienia -->
+            <!-- PRAWA: Lista zamówienia aktywnej osoby -->
             <div class="edit-order-items">
-              <h4 class="edit-order-items-title">🧾 Pozycje zamówienia</h4>
+              <h4 class="edit-order-items-title">🧾 Osoba {{ editActiveSeat + 1 }}</h4>
 
-              <div v-if="editOrderItems.length" class="edit-items-list">
-                <div v-for="item in editOrderItems" :key="item.key" class="edit-item-row">
+              <div v-if="editCurrentPersonItems.length" class="edit-items-list">
+                <div v-for="item in editCurrentPersonItems" :key="item.key" class="edit-item-row">
                   <div class="edit-item-info">
                     <span class="edit-item-name">{{ item.name }}</span>
                     <span v-if="item.quantity !== 1" class="edit-item-portion muted"> ({{ item.quantity === 0.5 ? '½' : item.quantity }})</span>
@@ -306,12 +337,12 @@
                     <span class="edit-item-price">{{ item.finalPrice.toFixed(2) }} zł</span>
                     <button class="edit-ctrl-btn edit-ctrl-btn--minus" @click="editDecreaseItem(item.key)">−</button>
                     <span class="edit-ctrl-count">× {{ item.count }}</span>
-                    <button class="edit-ctrl-btn edit-ctrl-btn--plus" @click="editOrderDraft.items[item.key] && editOrderDraft.items[item.key].count++">+</button>
+                    <button class="edit-ctrl-btn edit-ctrl-btn--plus" @click="editIncrease(item.key)">+</button>
                     <button class="edit-ctrl-btn edit-ctrl-btn--del" @click="editRemoveItem(item.key)">🗑</button>
                   </div>
                 </div>
               </div>
-              <p v-else class="muted" style="text-align:center; padding: 1rem 0; font-style: italic;">Brak pozycji</p>
+              <p v-else class="muted" style="text-align:center; padding: 1rem 0; font-style: italic;">Brak pozycji dla tej osoby</p>
 
               <!-- Pojemniki -->
               <div class="edit-containers-row">
@@ -325,7 +356,7 @@
 
               <!-- Suma -->
               <div class="edit-order-summary">
-                <span>Razem:</span>
+                <span>Razem ({{ editPersons.length }} os.):</span>
                 <strong>{{ editOrderTotal.toFixed(2) }} zł</strong>
               </div>
 
@@ -333,7 +364,7 @@
                 <button class="btn-secondary-form" @click="editOrderDialog = null">Anuluj</button>
                 <button
                   class="btn-primary"
-                  :disabled="!editOrderItems.length || !editOrderType || editOrderSaving"
+                  :disabled="editTotalItemCount === 0 || !editOrderType || editOrderSaving"
                   @click="confirmEditOrder"
                 >
                   {{ editOrderSaving ? 'Zapisywanie…' : '✅ Zapisz zmiany' }}
@@ -419,12 +450,14 @@ const categoryList = ['zupy', 'zupa dnia', 'dania główne', 'danie dnia', 'doda
 
 // ==================== Edycja zamówienia (z historii) ====================
 const editOrderDialog = ref(null)        // { order }
-const editOrderDraft = reactive({ items: {} })
 const editOrderType = ref(null)
 const editOrderContainers = ref(0)
 const editOrderCategory = ref('zupy')
 const editOrderSaving = ref(false)
 
+// Wieloosobowy draft w edycji
+const editPersons = ref([reactive({ items: {} })])
+const editActiveSeat = ref(0)
 
 const generateItemKey = (name, quantity = 1, extras = []) => {
   let key = name
@@ -433,26 +466,13 @@ const generateItemKey = (name, quantity = 1, extras = []) => {
   return key
 }
 
-const openEditOrderDialog = (order) => {
-  // Załaduj pozycje do draftu
-  editOrderDraft.items = {}
-  for (const item of (order.items || [])) {
-    const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
-    editOrderDraft.items[key] = {
-      name: item.name,
-      quantity: item.quantity ?? 1,
-      count: item.count ?? 1,
-      extras: [...(item.extras ?? [])],
-    }
-  }
-  editOrderType.value = order.type ?? null
-  editOrderContainers.value = order.containers ?? 0
-  editOrderCategory.value = 'zupy'
-  editOrderDialog.value = { order }
-}
+// Person helpers
+const editCurrentDraft = computed(() => editPersons.value[editActiveSeat.value] || editPersons.value[0])
 
-const editOrderItems = computed(() =>
-  Object.entries(editOrderDraft.items).map(([key, data]) => {
+const editGetPersonItems = (idx) => {
+  const draft = editPersons.value[idx]
+  if (!draft) return []
+  return Object.entries(draft.items).map(([key, data]) => {
     const found = menu.value.find(m => m.name === data.name)
     const basePrice = found?.price ?? 0
     const extrasPrice = (data.extras ?? []).reduce((s, n) => s + (extrasPriceMap.value[n] ?? 0), 0)
@@ -460,12 +480,57 @@ const editOrderItems = computed(() =>
     const finalPrice = unitPrice * data.quantity * (data.count ?? 1)
     return { key, name: data.name, quantity: data.quantity, count: data.count ?? 1, extras: data.extras ?? [], finalPrice }
   })
-)
+}
+
+const editCurrentPersonItems = computed(() => editGetPersonItems(editActiveSeat.value))
+const editTotalItemCount = computed(() => editPersons.value.reduce((sum, _, idx) => sum + editGetPersonItems(idx).length, 0))
+const editPersonItemCount = (idx) => Object.values(editPersons.value[idx]?.items || {}).length
+
+const editAddPerson = () => {
+  editPersons.value.push(reactive({ items: {} }))
+  editActiveSeat.value = editPersons.value.length - 1
+}
+
+const editRemovePerson = (idx) => {
+  if (editPersons.value.length <= 1) return
+  editPersons.value.splice(idx, 1)
+  if (editActiveSeat.value >= editPersons.value.length) editActiveSeat.value = editPersons.value.length - 1
+}
+
+const openEditOrderDialog = (order) => {
+  editPersons.value = []
+  // Nowy format: persons[]
+  if (order.persons && order.persons.length) {
+    for (const person of order.persons) {
+      const draft = reactive({ items: {} })
+      for (const item of (person.items || [])) {
+        const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
+        draft.items[key] = { name: item.name, quantity: item.quantity ?? 1, count: item.count ?? 1, extras: [...(item.extras ?? [])] }
+      }
+      editPersons.value.push(draft)
+    }
+  } else {
+    // Stary format: items[] → wszystko trafia do Osoby 1
+    const draft = reactive({ items: {} })
+    for (const item of (order.items || [])) {
+      const key = generateItemKey(item.name, item.quantity ?? 1, item.extras ?? [])
+      draft.items[key] = { name: item.name, quantity: item.quantity ?? 1, count: item.count ?? 1, extras: [...(item.extras ?? [])] }
+    }
+    editPersons.value.push(draft)
+  }
+  if (editPersons.value.length === 0) editPersons.value.push(reactive({ items: {} }))
+  editActiveSeat.value = 0
+  editOrderType.value = order.type ?? null
+  editOrderContainers.value = order.containers ?? 0
+  editOrderCategory.value = 'zupy'
+  editOrderDialog.value = { order }
+}
 
 const editOrderTotal = computed(() => {
-  const itemsTotal = editOrderItems.value.reduce((s, i) => s + i.finalPrice, 0)
+  let sum = 0
+  for (let i = 0; i < editPersons.value.length; i++) sum += editGetPersonItems(i).reduce((s, item) => s + item.finalPrice, 0)
   const containerItem = menu.value.find(m => m.name === 'pojemniki')
-  return itemsTotal + editOrderContainers.value * (containerItem?.price ?? 0)
+  return sum + editOrderContainers.value * (containerItem?.price ?? 0)
 })
 
 const editFilteredMenu = computed(() => {
@@ -477,37 +542,46 @@ const editFilteredMenu = computed(() => {
 
 const editAddItem = (item) => {
   const key = generateItemKey(item.name, 1, [])
-  if (editOrderDraft.items[key]) {
-    editOrderDraft.items[key].count++
+  if (editCurrentDraft.value.items[key]) {
+    editCurrentDraft.value.items[key].count++
   } else {
-    editOrderDraft.items[key] = { name: item.name, quantity: 1, count: 1, extras: [] }
+    editCurrentDraft.value.items[key] = { name: item.name, quantity: 1, count: 1, extras: [] }
   }
 }
 
 const editRemoveItem = (key) => {
-  delete editOrderDraft.items[key]
+  delete editCurrentDraft.value.items[key]
 }
 
 const editDecreaseItem = (key) => {
-  const entry = editOrderDraft.items[key]
+  const entry = editCurrentDraft.value.items[key]
   if (!entry) return
   if (entry.count > 1) entry.count--
-  else delete editOrderDraft.items[key]
+  else delete editCurrentDraft.value.items[key]
+}
+
+const editIncrease = (key) => {
+  const entry = editCurrentDraft.value.items[key]
+  if (entry) entry.count++
 }
 
 const confirmEditOrder = async () => {
   if (!editOrderDialog.value) return
   editOrderSaving.value = true
   try {
-    const items = editOrderItems.value.map(i => ({
-      name: i.name,
-      quantity: i.quantity,
-      count: i.count,
-      extras: i.extras,
-      finalPrice: i.finalPrice,
-    }))
+    // Zbuduj payload osób
+    const personsPayload = editPersons.value.map((_, idx) => ({
+      seat: idx + 1,
+      items: editGetPersonItems(idx).map(i => ({
+        name: i.name, quantity: i.quantity, count: i.count, extras: i.extras, finalPrice: i.finalPrice,
+      }))
+    })).filter(p => p.items.length > 0)
+
+    const flatItems = personsPayload.flatMap(p => p.items)
+
     await updateDoc(doc(db, 'orders', editOrderDialog.value.order.id), {
-      items,
+      persons: personsPayload,
+      items: flatItems,
       type: editOrderType.value,
       containers: editOrderContainers.value,
       editedAt: Timestamp.now(),
@@ -515,7 +589,8 @@ const confirmEditOrder = async () => {
     // Zaktualizuj lokalnie
     const found = orders.value.find(o => o.id === editOrderDialog.value.order.id)
     if (found) {
-      found.items = items
+      found.persons = personsPayload
+      found.items = flatItems
       found.type = editOrderType.value
       found.containers = editOrderContainers.value
       found.editedAt = new Date()
@@ -1327,5 +1402,84 @@ const formatQuantity = (qty) => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+/* ===================== ZAKŁADKI OSÓB W EDYCJI ===================== */
+.edit-persons-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 2px solid var(--border-subtle);
+}
+
+.edit-person-tab {
+  border-radius: 9999px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1.5px solid #e5e7eb;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: inherit;
+}
+.edit-person-tab:hover { background: #e5e7eb; }
+.edit-person-tab.active {
+  background: #8fbc8f;
+  color: #1a3a1a;
+  border-color: #2f9e44;
+  box-shadow: 0 0 0 2px #d3f9d8;
+}
+.edit-person-tab--add {
+  background: #fff;
+  border-color: #2f9e44;
+  color: #2f9e44;
+}
+.edit-person-tab--add:hover { background: #d3f9d8; }
+.edit-person-tab--remove {
+  background: #fff;
+  border-color: #cc0000;
+  color: #cc0000;
+}
+.edit-person-tab--remove:hover { background: #ffe3e3; }
+.edit-person-tab-count {
+  background: #2f9e44;
+  color: #fff;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0 0.35rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
+
+/* ===================== BLOKI OSÓB W HISTORII ===================== */
+.history-person-block {
+  margin-top: 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 3px solid #8fbc8f;
+  border-radius: 0 0.3rem 0.3rem 0;
+}
+
+.history-person-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2b8a3e;
+  margin-bottom: 0.1rem;
+}
+
+.history-person-item {
+  font-size: 0.88rem;
+  color: var(--text);
+  padding: 0.05rem 0;
 }
 </style>
