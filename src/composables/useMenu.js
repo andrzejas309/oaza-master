@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { db } from '@/firebase'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore'
+import { collection, getDocs, addDoc, updateDoc, doc, writeBatch } from 'firebase/firestore'
 
 const menuItems = ref([])
 const loading = ref(false)
@@ -107,14 +107,38 @@ export function useMenu() {
     }
   }
 
-  // Usuń pozycję
+  // Usuń pozycję + zależności (menu dnia, matryca extras, konfiguracja porcji)
   const deleteMenuItem = async (id) => {
     error.value = null
     const prev = menuItems.value.find(m => m.id === id)
     // Optymistyczny update
     menuItems.value = menuItems.value.filter(m => m.id !== id)
     try {
-      await deleteDoc(doc(db, 'menu', id))
+      const batch = writeBatch(db)
+
+      // Główny dokument menu
+      batch.delete(doc(db, 'menu', id))
+
+      // Dokumenty zależne 1:1 po menuItemId
+      batch.delete(doc(db, 'extrasMatrix', id))
+      batch.delete(doc(db, 'portionConfig', id))
+
+      // Usuń ID z menu dnia (we wszystkich dniach)
+      const dailySnap = await getDocs(collection(db, 'dailyMenu'))
+      dailySnap.forEach(dayDoc => {
+        const data = dayDoc.data()
+        const zupy = Array.isArray(data.zupy) ? data.zupy : []
+        const dania = Array.isArray(data.dania) ? data.dania : []
+
+        const nextZupy = zupy.filter(itemId => itemId !== id)
+        const nextDania = dania.filter(itemId => itemId !== id)
+
+        if (nextZupy.length !== zupy.length || nextDania.length !== dania.length) {
+          batch.set(doc(db, 'dailyMenu', dayDoc.id), { zupy: nextZupy, dania: nextDania }, { merge: true })
+        }
+      })
+
+      await batch.commit()
     } catch (err) {
       // Rollback
       if (prev) menuItems.value = [...menuItems.value, prev]
@@ -147,6 +171,72 @@ export function useMenu() {
     })
   }
 
+  const cleanupMenuDependencies = async () => {
+    error.value = null
+
+    const stats = {
+      removedDailyRefs: 0,
+      removedExtrasMatrixDocs: 0,
+      removedPortionConfigDocs: 0,
+      updatedDailyDocs: 0,
+    }
+
+    try {
+      const [menuSnap, dailySnap, matrixSnap, portionSnap] = await Promise.all([
+        getDocs(collection(db, 'menu')),
+        getDocs(collection(db, 'dailyMenu')),
+        getDocs(collection(db, 'extrasMatrix')),
+        getDocs(collection(db, 'portionConfig')),
+      ])
+
+      const menuIds = new Set(menuSnap.docs.map(d => d.id))
+      const batch = writeBatch(db)
+
+      dailySnap.forEach(dayDoc => {
+        const data = dayDoc.data()
+        const zupy = Array.isArray(data.zupy) ? data.zupy : []
+        const dania = Array.isArray(data.dania) ? data.dania : []
+
+        const nextZupy = zupy.filter(itemId => menuIds.has(itemId))
+        const nextDania = dania.filter(itemId => menuIds.has(itemId))
+
+        if (nextZupy.length !== zupy.length || nextDania.length !== dania.length) {
+          stats.removedDailyRefs += (zupy.length - nextZupy.length) + (dania.length - nextDania.length)
+          stats.updatedDailyDocs += 1
+          batch.set(doc(db, 'dailyMenu', dayDoc.id), { zupy: nextZupy, dania: nextDania }, { merge: true })
+        }
+      })
+
+      matrixSnap.forEach(matrixDoc => {
+        if (!menuIds.has(matrixDoc.id)) {
+          stats.removedExtrasMatrixDocs += 1
+          batch.delete(doc(db, 'extrasMatrix', matrixDoc.id))
+        }
+      })
+
+      portionSnap.forEach(portionDoc => {
+        if (!menuIds.has(portionDoc.id)) {
+          stats.removedPortionConfigDocs += 1
+          batch.delete(doc(db, 'portionConfig', portionDoc.id))
+        }
+      })
+
+      const hasChanges =
+        stats.removedDailyRefs > 0 ||
+        stats.removedExtrasMatrixDocs > 0 ||
+        stats.removedPortionConfigDocs > 0
+
+      if (hasChanges) {
+        await batch.commit()
+      }
+
+      return stats
+    } catch (err) {
+      error.value = err.message
+      throw err
+    }
+  }
+
   return {
     menuItems,
     menuByCategory,
@@ -156,6 +246,7 @@ export function useMenu() {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
-    reorderMenuItems
+    reorderMenuItems,
+    cleanupMenuDependencies,
   }
 }

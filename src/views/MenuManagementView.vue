@@ -40,6 +40,14 @@
           <button class="btn-add-item btn-add-item--menu" @click="openAddDialog('menu')">
             ➕ Dodaj nową pozycję
           </button>
+          <button
+            class="btn-cleanup"
+            @click="runDependenciesCleanup"
+            :disabled="cleanupRunning || saving"
+          >
+            {{ cleanupRunning ? 'Czyszczenie…' : '🧹 Cleanup osieroconych danych' }}
+          </button>
+          <div v-if="cleanupMessage" class="cleanup-info">{{ cleanupMessage }}</div>
         </div>
 
         <div v-if="menuLoading && !menuItems.length" class="state-info muted">Ładowanie menu…</div>
@@ -62,7 +70,7 @@
               :class="{ 'items-list--empty': !localMenuLists[category.value]?.length }"
               :group="{ name: 'menu' }"
               @start="(evt) => { draggedFromCategory = category.value; draggedItem = localMenuLists[category.value][evt.oldIndex] }"
-              @end="(evt) => onMenuDragEnd(evt, category.value)"
+              @end="() => onMenuDragEnd(category.value)"
             >
               <template #item="{ element: item, index }">
                 <li class="item-row item-row--draggable">
@@ -454,7 +462,8 @@ const { logout } = useAuth()
 
 const {  menuItems, menuByCategory,
   loading: menuLoading, error: menuError,
-  fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, reorderMenuItems
+  fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, reorderMenuItems,
+  cleanupMenuDependencies,
 } = useMenu()
 
 const {
@@ -488,17 +497,19 @@ const availableDania = (dayKey) => danieDniaItems.value.filter(i => !localDaily[
 const localDaily = reactive(Object.fromEntries(DAYS.map(d => [d.key, { zupy: [], dania: [] }])))
 const dailySaving = reactive(Object.fromEntries(DAYS.map(d => [d.key, false])))
 const dailySaved  = reactive(Object.fromEntries(DAYS.map(d => [d.key, false])))
+const SAVE_BADGE_TIMEOUT_MS = 2000
 
-// Stan selectów per dzień
-const addSelects = reactive(Object.fromEntries(DAYS.map(d => [d.key, { zupa: '', danie: '' }])))
-
-// Synchronizuj localDaily gdy dane z bazy się załadują
-watch(dailyMenu, (val) => {
-  DAYS.forEach(d => {
-    localDaily[d.key].zupy  = [...(val[d.key]?.zupy  ?? [])]
-    localDaily[d.key].dania = [...(val[d.key]?.dania ?? [])]
-  })
-}, { immediate: true, deep: true })
+const runSaveWithFeedback = async (savingMap, savedMap, key, saveFn) => {
+  savingMap[key] = true
+  savedMap[key] = false
+  try {
+    await saveFn()
+    savedMap[key] = true
+    setTimeout(() => { savedMap[key] = false }, SAVE_BADGE_TIMEOUT_MS)
+  } finally {
+    savingMap[key] = false
+  }
+}
 
 const addToDay = (dayKey, field, id) => {
   if (!id || localDaily[dayKey][field].includes(id)) return
@@ -511,16 +522,12 @@ const removeFromDay = (dayKey, field, id) => {
 }
 
 const saveDay = async (dayKey) => {
-  dailySaving[dayKey] = true
-  dailySaved[dayKey]  = false
   try {
-    await saveDayMenu(dayKey, localDaily[dayKey].zupy, localDaily[dayKey].dania)
-    dailySaved[dayKey] = true
-    setTimeout(() => { dailySaved[dayKey] = false }, 2000)
+    await runSaveWithFeedback(dailySaving, dailySaved, dayKey, () =>
+      saveDayMenu(dayKey, localDaily[dayKey].zupy, localDaily[dayKey].dania)
+    )
   } catch (err) {
     alert('Błąd zapisu: ' + err.message)
-  } finally {
-    dailySaving[dayKey] = false
   }
 }
 
@@ -569,16 +576,12 @@ const matrixRemove = (itemId, eid) => {
 }
 
 const matrixSave = async (itemId) => {
-  matrixSaving[itemId] = true
-  matrixSaved[itemId]  = false
   try {
-    await saveMatrix(itemId, matrixLocal[itemId] ?? [])
-    matrixSaved[itemId] = true
-    setTimeout(() => { matrixSaved[itemId] = false }, 2000)
+    await runSaveWithFeedback(matrixSaving, matrixSaved, itemId, () =>
+      saveMatrix(itemId, matrixLocal[itemId] ?? [])
+    )
   } catch (err) {
     alert('Błąd zapisu: ' + err.message)
-  } finally {
-    matrixSaving[itemId] = false
   }
 }
 
@@ -630,17 +633,13 @@ watch(portionConfig, (val) => {
 }, { deep: true })
 
 const portionSave = async (itemId) => {
-  portionSaving[itemId] = true
-  portionSaved[itemId]  = false
   try {
     const cfg = portionLocal[itemId]
-    await savePortionConfig(itemId, cfg.mode, cfg.mode === 'portions' ? cfg.portions : [])
-    portionSaved[itemId] = true
-    setTimeout(() => { portionSaved[itemId] = false }, 2000)
+    await runSaveWithFeedback(portionSaving, portionSaved, itemId, () =>
+      savePortionConfig(itemId, cfg.mode, cfg.mode === 'portions' ? cfg.portions : [])
+    )
   } catch (err) {
     alert('Błąd zapisu: ' + err.message)
-  } finally {
-    portionSaving[itemId] = false
   }
 }
 
@@ -673,6 +672,8 @@ const dialogMode = ref('menu')   // 'menu' | 'extras'
 const deleteDialog = ref(null)   // { mode, item }
 const editMode = ref(false)
 const saving = ref(false)
+const cleanupRunning = ref(false)
+const cleanupMessage = ref('')
 const formData = ref({ name: '', price: '', category: '' })
 const editingId = ref(null)
 
@@ -687,11 +688,18 @@ onMounted(() => {
 
 
 // ==================== Dialog Management ====================
+const createEmptyFormData = (mode = 'menu') => ({
+  name: '',
+  price: mode === 'extras' ? 0 : '',
+  category: '',
+  showInKitchen: false,
+})
+
 const openAddDialog = (mode) => {
   dialogMode.value = mode
   editMode.value = false
   editingId.value = null
-  formData.value = { name: '', price: mode === 'extras' ? 0 : '', category: '', showInKitchen: false }
+  formData.value = createEmptyFormData(mode)
   dialogOpen.value = true
 }
 
@@ -705,12 +713,12 @@ const openEditDialog = (mode, item) => {
 
 const closeDialog = () => {
   dialogOpen.value = false
-  formData.value = { name: '', price: '', category: '' }
+  formData.value = createEmptyFormData(dialogMode.value)
   editingId.value = null
 }
 
 // ==================== Drag & Drop ====================
-const onMenuDragEnd = async (evt, targetCategory) => {
+const onMenuDragEnd = async (targetCategory) => {
   if (reordering.value) return
   reordering.value = true
   try {
@@ -818,12 +826,50 @@ const executeDelete = async () => {
   saving.value = true
   try {
     const { mode, item } = deleteDialog.value
-    mode === 'menu' ? await deleteMenuItem(item.id) : await deleteExtra(item.id)
+
+    if (mode === 'menu') {
+      await deleteMenuItem(item.id)
+      await Promise.all([
+        fetchDailyMenu(),
+        fetchMatrix(),
+        fetchPortionConfig(true),
+      ])
+    } else {
+      await deleteExtra(item.id)
+    }
+
     deleteDialog.value = null
   } catch (err) {
     alert('Błąd podczas usuwania: ' + err.message)
   } finally {
     saving.value = false
+  }
+}
+
+const runDependenciesCleanup = async () => {
+  cleanupRunning.value = true
+  cleanupMessage.value = ''
+
+  try {
+    const stats = await cleanupMenuDependencies()
+    await Promise.all([
+      fetchDailyMenu(),
+      fetchMatrix(),
+      fetchPortionConfig(true),
+    ])
+
+    const totalChanges =
+      stats.removedDailyRefs +
+      stats.removedExtrasMatrixDocs +
+      stats.removedPortionConfigDocs
+
+    cleanupMessage.value = totalChanges === 0
+      ? 'Nic do czyszczenia - brak osieroconych zależności.'
+      : `Cleanup zakończony: usunięto ${stats.removedDailyRefs} referencji w menu dnia, ${stats.removedExtrasMatrixDocs} dokumentów matrycy i ${stats.removedPortionConfigDocs} konfiguracji porcji.`
+  } catch (err) {
+    cleanupMessage.value = `Cleanup nie powiódł się: ${err.message}`
+  } finally {
+    cleanupRunning.value = false
   }
 }
 </script>
@@ -911,6 +957,36 @@ const executeDelete = async () => {
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
 }
 .btn-add-item--extras:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4); }
+
+.btn-cleanup {
+  margin-top: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius);
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-cleanup:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-cleanup:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cleanup-info {
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
 
 /* ===================== STANY ===================== */
 .state-info { text-align: center; padding: 2rem; font-size: 1.05rem; }
@@ -1093,7 +1169,6 @@ const executeDelete = async () => {
 .btn-primary--extras:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(124,58,237,0.35); }
 
 /* ===================== MISC ===================== */
-.empty-category { font-style: italic; text-align: center; padding: 0.75rem 0; color: var(--muted); font-size: 0.9rem; }
 
 .kitchen-dot {
   width: 0.65rem;
@@ -1250,25 +1325,6 @@ const executeDelete = async () => {
 .daily-saving { font-size: 0.78rem; color: var(--muted); }
 .daily-saved  { font-size: 0.78rem; color: #16a34a; font-weight: 700; }
 
-.btn-daily-add {
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  color: #fff;
-  border: none;
-  border-radius: 0.5rem;
-  padding: 0.35rem 0.8rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: box-shadow 0.15s, transform 0.15s;
-  flex-shrink: 0;
-}
-.btn-daily-add:hover:not(:disabled) {
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
-  transform: translateY(-1px);
-}
-.btn-daily-add:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-daily-save {
   background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
