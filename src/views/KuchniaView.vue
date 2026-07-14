@@ -204,6 +204,17 @@ const elapsedClass = (ts) => {
   background: #ffffff;
   font-family: 'Inter', system-ui, sans-serif;
   color: var(--text);
+    zoom: 0.5;
+}
+
+@supports not (zoom: 1) {
+  .kuchnia-root {
+    zoom: 1;
+    width: 200%;
+    transform: scale(0.5);
+    transform-origin: top left;
+    overflow-x: hidden;
+  }
 }
 
 /* ===================== HEADER ===================== */
