@@ -317,8 +317,12 @@ const elapsedClass = (ts) => {
 
 /* ===================== KARTA ZAMÓWIENIA ===================== */
 .order-card {
-  width: 320px;
+  display: inline-flex;
+  flex-direction: column;
+  width: fit-content;
+  max-width: 100%;
   flex-shrink: 0;
+  align-self: flex-start;
   border-radius: var(--radius);
   box-shadow: 0 2px 10px rgba(0,0,0,0.09);
   overflow: hidden;
@@ -442,10 +446,12 @@ const elapsedClass = (ts) => {
 }
 
 .order-item-main {
-  display: flex;
+  display: inline-flex;
   flex-wrap: nowrap;
   gap: 0.35rem;
   align-items: center;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
 }
 .item-num {
@@ -468,7 +474,8 @@ const elapsedClass = (ts) => {
   font-size: 1.5rem;
   font-weight: 700;
   color: #111827;
-  flex: 1;
+  flex: 0 1 auto;
+  max-width: 100%;
   min-width: 0;
   word-break: break-word;
   overflow-wrap: break-word;
