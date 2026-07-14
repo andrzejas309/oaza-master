@@ -6,6 +6,9 @@
       <div class="header-brand">
         <h1 class="kuchnia-title">Panel Kuchni</h1>
       </div>
+      <div class="header-clock">
+        {{ currentTime.slice(0, 5) }}<span class="clock-seconds">:{{ currentTime.slice(6) }}</span>
+      </div>
       <nav class="header-nav">
         <button v-if="userRole === 'admin'" class="btn-nav" @click="router.push('/admin')">Admin</button>
         <button v-if="userRole === 'admin'" class="btn-nav" @click="router.push('/obsluga')">Obsługa</button>
@@ -14,11 +17,6 @@
     </header>
 
     <div class="kuchnia-layout">
-      <!-- ZEGAR -->
-      <div class="kitchen-clock">
-        {{ currentTime.slice(0, 5) }}<span class="clock-seconds">:{{ currentTime.slice(6) }}</span>
-      </div>
-
       <div class="main-layout">
 
         <!-- LEWA – ZAMÓWIENIA -->
@@ -52,11 +50,12 @@
                       <li v-for="(item, i) in filterKitchenItems(person.items)" :key="item.name + i" class="order-item-line">
                         <div class="order-item-main">
                           <span class="item-num">•</span>
-                          <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatPortionPrefix(item.quantity, item.name) }}</span>
+                          <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatKitchenPortionPrefix(item.quantity, item.name) }}</span>
                           <span class="item-name">{{ item.name }}</span>
                         </div>
                         <div v-if="item.extras && item.extras.length" class="item-extras-list">
-                          <span v-for="extra in item.extras" :key="extra" class="item-extras">+ {{ extra }}</span>
+                          <span class="item-extras-prefix">+</span>
+                          <span class="item-extras-text">{{ item.extras.join(', ') }}</span>
                         </div>
                       </li>
                     </ol>
@@ -68,7 +67,7 @@
                     <li v-for="(item, i) in filterKitchenItems(order.items)" :key="item.name + i" class="order-item-line">
                       <div class="order-item-main">
                         <span class="item-num">•</span>
-                        <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatPortionPrefix(item.quantity, item.name) }}</span>
+                        <span v-if="item.quantity && item.quantity !== 1" class="item-portion-prefix">{{ formatKitchenPortionPrefix(item.quantity, item.name) }}</span>
                         <span class="item-name">{{ item.name }}</span>
                       </div>
                     </li>
@@ -127,6 +126,7 @@ let ticker = null
 
 // ==================== Lifecycle ====================
 onMounted(() => {
+  document.body.classList.add('kuchnia-page')
   ticker = setInterval(() => { now.value = Date.now() }, 1000)
 
   const currentUser = auth.currentUser
@@ -148,6 +148,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.body.classList.remove('kuchnia-page')
   if (unsub) unsub()
   if (ticker) clearInterval(ticker)
 })
@@ -187,6 +188,12 @@ const formatElapsed = (ts) => {
   return `${mm}:${ss}`
 }
 
+const formatKitchenPortionPrefix = (val, itemName) => {
+  const prefix = formatPortionPrefix(val, itemName)
+  if (typeof prefix !== 'string') return prefix
+  return prefix.replace(/x$/, '')
+}
+
 const elapsedClass = (ts) => {
   if (!ts?.seconds) return ''
   const mins = (now.value - ts.seconds * 1000) / 60000
@@ -198,13 +205,17 @@ const elapsedClass = (ts) => {
 
 <style scoped>
 
+:global(body.kuchnia-page) {
+  background: #ffffff;
+}
+
 /* ===================== ROOT ===================== */
 .kuchnia-root {
   min-height: 100vh;
   background: #ffffff;
   font-family: 'Inter', system-ui, sans-serif;
   color: var(--text);
-    zoom: 0.7;
+    zoom: 0.65;
 }
 
 @supports not (zoom: 1) {
@@ -222,17 +233,45 @@ const elapsedClass = (ts) => {
   position: sticky;
   top: 0;
   z-index: 100;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   background: #ffffff;
   padding: 0.65rem 1.25rem;
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  gap: 1rem;
 }
-.header-brand { display: flex; align-items: center; gap: 0.6rem; }
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-self: start;
+  min-width: 0;
+}
 .header-icon { font-size: 1.6rem; line-height: 1; }
 .kuchnia-title { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.02em; color: #000; }
-.header-nav { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.header-clock {
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+  font-size: clamp(1.5rem, 3vw, 2.4rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: #111827;
+  line-height: 1;
+  white-space: nowrap;
+}
+.header-nav {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-self: end;
+}
 .btn-nav {
   background: #e5e7eb;
   border: 2px solid #111827;
@@ -251,6 +290,7 @@ const elapsedClass = (ts) => {
 /* ===================== LAYOUT ===================== */
 .kuchnia-layout {
   width: 100%;
+  background: #ffffff;
   padding: 1.25rem 1.25rem 2rem;
 }
 .main-layout {
@@ -259,20 +299,13 @@ const elapsedClass = (ts) => {
   align-items: flex-start;
 }
 
-.orders-section { flex: 1; min-width: 0; width: 100%; }
-.kitchen-clock {
-  text-align: center;
-  font-size: 3.5rem;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-  color: #111827;
-  padding: 0.5rem 0 1rem;
-  line-height: 1;
-}
 .clock-seconds { color: #9ca3af; font-weight: 700; }
 
-.orders-section { flex: 3; min-width: 0; }
+.orders-section {
+  flex: 3;
+  min-width: 0;
+  background: #ffffff;
+}
 
 /* ===================== SIATKA ZAMÓWIEŃ ===================== */
 .orders-grid {
@@ -284,7 +317,7 @@ const elapsedClass = (ts) => {
 
 /* ===================== KARTA ZAMÓWIENIA ===================== */
 .order-card {
-  width: 345px;
+  width: 320px;
   flex-shrink: 0;
   border-radius: var(--radius);
   box-shadow: 0 2px 10px rgba(0,0,0,0.09);
@@ -293,7 +326,7 @@ const elapsedClass = (ts) => {
 }
 
 .order-top {
-  padding: 0.45rem 0.6rem;
+  padding: 0.35rem 0.5rem;
   font-weight: 600;
   color: #111;
 }
@@ -306,19 +339,19 @@ const elapsedClass = (ts) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.15rem;
 }
 
 .order-number {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
 }
 
 .order-num-badge {
   font-weight: 900;
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   color: #111827;
 }
 
@@ -341,11 +374,11 @@ const elapsedClass = (ts) => {
 }
 
 .order-timer {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  padding: 0.15rem 0.65rem;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.55rem;
   border-radius: 0.4rem;
 }
 .timer--ok      { background: #dcfce7; color: #15803d; }
@@ -355,16 +388,16 @@ const elapsedClass = (ts) => {
 .order-meta {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   color: #374151;
 }
 .order-type-pill {
   background: rgba(0,0,0,0.08);
   border-radius: 9999px;
   padding: 0.05rem 0.5rem;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
   margin-left: auto;
 }
@@ -372,13 +405,13 @@ const elapsedClass = (ts) => {
 /* ciało karty */
 .order-body {
   background: #ffffff;
-  padding: 0.45rem 0.6rem 0.6rem;
+  padding: 0.35rem 0.5rem 0.5rem;
 }
 
 /* ===================== BLOKI OSÓB ===================== */
 .person-block {
-  margin-top: 0.75rem;
-  padding-top: 0.65rem;
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
   border-top: 2px solid #9ca3af;
 }
 .person-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
@@ -398,7 +431,7 @@ const elapsedClass = (ts) => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
 }
 .order-item-line {
   display: flex;
@@ -448,15 +481,25 @@ const elapsedClass = (ts) => {
 }
 .item-extras-list {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.25rem;
   padding-left: 1.35rem;
 }
-.item-extras {
+.item-extras-prefix {
   font-size: 1.5rem;
   font-weight: 700;
   color: #6b7280;
   font-style: italic;
+  flex-shrink: 0;
+}
+.item-extras-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #6b7280;
+  font-style: italic;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ===================== MISC ===================== */

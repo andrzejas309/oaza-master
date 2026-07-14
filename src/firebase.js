@@ -11,6 +11,20 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+const missingFirebaseEnvEntries = Object.entries(firebaseConfig)
+    .filter(([, value]) => !value || String(value).includes("your-"))
+    .map(([key]) => key);
+
+if (missingFirebaseEnvEntries.length > 0) {
+    throw new Error(
+        [
+            "Brakuje poprawnej konfiguracji Firebase.",
+            `Uzupełnij zmienne Vite dla pól: ${missingFirebaseEnvEntries.join(", ")}.`,
+            "Skopiuj `.env.example` do `.env.local`, wpisz prawdziwe wartości z Firebase Console i zrestartuj Vite."
+        ].join(" ")
+    );
+}
+
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
