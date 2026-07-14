@@ -204,14 +204,14 @@ const elapsedClass = (ts) => {
   background: #ffffff;
   font-family: 'Inter', system-ui, sans-serif;
   color: var(--text);
-    zoom: 0.5;
+    zoom: 0.7;
 }
 
 @supports not (zoom: 1) {
   .kuchnia-root {
     zoom: 1;
     width: 200%;
-    transform: scale(0.5);
+    transform: scale(0.7);
     transform-origin: top left;
     overflow-x: hidden;
   }
